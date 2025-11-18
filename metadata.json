@@ -1,0 +1,5 @@
+{
+  "name": "Scrum Task Dashboard_VG",
+  "description": "An interactive dashboard for tracking activities, inspired by Scrum boards. It allows users to manage tasks for multiple projects in a Kanban-style board or a list view, with an AI-powered feature to generate subtasks.",
+  "requestFramePermissions": []
+}
