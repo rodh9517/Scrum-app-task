@@ -1,14 +1,21 @@
+
 export enum TaskStatus {
+  Backlog = 'Backlog', // New Status
   ToDo = 'To Do',
   InProgress = 'In Progress',
   Done = 'Done',
 }
+
+// New Types for Priority and Duration
+export type TaskPriority = 'Baja' | 'Moderada' | 'Media' | 'Alta' | 'Urgente';
+export type TaskDuration = '1 día' | '2-3 días' | '1 semana' | '2 semanas';
 
 export interface Project {
   id: string;
   name: string;
   color: string;
   responsibleIds: string[];
+  description?: string; // New field for AI context
 }
 
 export interface User {
@@ -16,6 +23,7 @@ export interface User {
   name: string;
   avatarColor: string;
   picture?: string;
+  email?: string; // New field for collaborative matching
 }
 
 export interface Subtask {
@@ -30,10 +38,14 @@ export interface Task {
   description: string;
   status: TaskStatus;
   projectId: string;
-  responsibleId: string;
+  responsibleId: string; // Can be empty string if in Backlog
   subtasks: Subtask[];
   createdAt: string; // ISO date string
   completedAt?: string | null; // ISO date string
+  order?: number; // Added for manual sorting
+  // New Fields
+  priority?: TaskPriority;
+  duration?: TaskDuration;
 }
 
 export interface Message {
@@ -55,6 +67,7 @@ export interface Notification {
   type: NotificationType;
   createdAt: number;
   onClick?: () => void;
+  read?: boolean; // New field to track read status
 }
 
 // --- NEW TYPES FOR WORKSPACES ---
@@ -66,4 +79,8 @@ export interface Workspace {
     name: string;
     isPersonal: boolean;
     members?: WorkspaceMember[]; // Optional, for display on selector
+    // New visual properties
+    icon?: string; // Emoji or icon identifier
+    theme?: string; // Hex color for background/accent
+    order?: number; // For sorting
 }

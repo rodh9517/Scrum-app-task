@@ -1,4 +1,31 @@
-import { Project, Task, TaskStatus, User, Workspace } from './types';
+
+import { Project, Task, TaskStatus, User, Workspace, TaskPriority, TaskDuration } from './types';
+
+// --- WEIGHTING CONFIGURATION ---
+
+export const PRIORITY_WEIGHTS: Record<TaskPriority, number> = {
+  'Baja': 5,
+  'Moderada': 8,
+  'Media': 13,
+  'Alta': 20,
+  'Urgente': 40
+};
+
+export const DURATION_WEIGHTS: Record<TaskDuration, number> = {
+  '1 día': 5,
+  '2-3 días': 8,
+  '1 semana': 13,
+  '2 semanas': 20
+};
+
+export const PRIORITY_COLORS: Record<TaskPriority, string> = {
+  'Baja': '#9CA3AF',      // Gray
+  'Moderada': '#10B981',  // Green
+  'Media': '#F59E0B',     // Amber
+  'Alta': '#F97316',      // Orange
+  'Urgente': '#EF4444'    // Red
+};
+
 
 // Mock data for users
 export const USERS: User[] = [
@@ -9,9 +36,27 @@ export const USERS: User[] = [
 
 // Mock data for projects
 export const PROJECTS: Project[] = [
-  { id: 'proj-1', name: 'Desarrollo Frontend', color: '#4A90E2', responsibleIds: ['user-1', 'user-3'] },
-  { id: 'proj-2', name: 'Campaña de Marketing', color: '#F5A623', responsibleIds: ['user-2'] },
-  { id: 'proj-3', name: 'Investigación UX', color: '#50E3C2', responsibleIds: ['user-3'] },
+  { 
+    id: 'proj-1', 
+    name: 'Desarrollo Frontend', 
+    color: '#4A90E2', 
+    responsibleIds: ['user-1', 'user-3'],
+    description: 'Creación de una interfaz de usuario moderna y responsiva utilizando React y Tailwind CSS para el nuevo portal de clientes.'
+  },
+  { 
+    id: 'proj-2', 
+    name: 'Campaña de Marketing', 
+    color: '#F5A623', 
+    responsibleIds: ['user-2'],
+    description: 'Lanzamiento del producto Q3 enfocado en redes sociales y email marketing para aumentar la retención de usuarios.'
+  },
+  { 
+    id: 'proj-3', 
+    name: 'Investigación UX', 
+    color: '#50E3C2', 
+    responsibleIds: ['user-3'],
+    description: 'Estudio de usabilidad y entrevistas con usuarios para identificar puntos de dolor en el flujo de pago actual.'
+  },
 ];
 
 
@@ -31,6 +76,8 @@ export const TASKS: Task[] = [
     ],
     createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
     completedAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
+    priority: 'Alta',
+    duration: '1 día'
   },
   {
     id: 'task-2',
@@ -46,6 +93,8 @@ export const TASKS: Task[] = [
     ],
     createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
     completedAt: null,
+    priority: 'Media',
+    duration: '2-3 días'
   },
   {
     id: 'task-3',
@@ -61,6 +110,8 @@ export const TASKS: Task[] = [
     ],
     createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
     completedAt: null,
+    priority: 'Urgente',
+    duration: '1 semana'
   },
 ];
 

@@ -88,9 +88,15 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     };
 
     // Forge a fake JWT token structure (Header.Payload.Signature)
-    // The App.tsx decodeJwt function only looks at the payload (middle part).
     const header = btoa(JSON.stringify({ alg: "HS256", typ: "JWT" }));
-    const payload = btoa(JSON.stringify(mockProfile));
+    
+    // Encode payload handling UTF-8 characters correctly so App.tsx decodeJwt works
+    const stringifiedProfile = JSON.stringify(mockProfile);
+    const payload = btoa(encodeURIComponent(stringifiedProfile).replace(/%([0-9A-F]{2})/g,
+        function toSolidBytes(match, p1) {
+            return String.fromCharCode(parseInt(p1, 16));
+    }));
+
     const signature = "dev-signature-bypass";
     const token = `${header}.${payload}.${signature}`;
 
@@ -100,7 +106,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
       <div className="p-10 bg-white rounded-xl shadow-2xl text-center max-w-md w-full border border-gray-200">
-        <Logo className="h-24 mx-auto mb-6" />
+        <Logo className="h-16 mx-auto mb-6" />
         <h1 className="text-3xl font-bold text-gray-800 mb-2">Bienvenido al Dashboard</h1>
         <p className="text-gray-600 mb-10">Gestiona tus proyectos y tareas con facilidad.</p>
         

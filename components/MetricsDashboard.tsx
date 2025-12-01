@@ -1,7 +1,13 @@
-import React, { useMemo, useState } from 'react';
-import { Task, Project, User, TaskStatus } from '../types';
-import { DownloadIcon } from './Icons';
+
+import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { Task, Project, User, TaskStatus, TaskPriority } from '../types';
+import { DownloadIcon, MagicIcon, ChartIcon } from './Icons';
 import { generateReport } from '../services/ReportGenerator';
+import { PRIORITY_WEIGHTS, DURATION_WEIGHTS, PRIORITY_COLORS } from '../constants';
+import { generatePerformanceAnalysis } from '../services/geminiService';
+
+// Declare Chart.js global
+declare const Chart: any;
 
 interface MetricsDashboardProps {
   tasks: Task[];
@@ -16,24 +22,59 @@ const calculateCycleTimeInDays = (start: string, end: string): number => {
   return diffTime / (1000 * 60 * 60 * 24);
 };
 
-const MetricCard: React.FC<{ title: string; value: string; }> = ({ title, value }) => (
+const MetricCard: React.FC<{ title: string; value: string; subtitle?: string }> = ({ title, value, subtitle }) => (
   <div className="bg-white p-6 rounded-lg shadow-md">
     <h3 className="text-sm font-medium text-gray-500">{title}</h3>
     <p className="mt-1 text-3xl font-semibold text-gray-900">{value}</p>
+    {subtitle && <p className="text-xs text-gray-400 mt-1">{subtitle}</p>}
   </div>
 );
 
 export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ tasks, projects, users }) => {
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const priorityChartRef = useRef<HTMLCanvasElement>(null);
+  const chartInstanceRef = useRef<any>(null);
+
+  // AI Analysis State
+  const [analysisStartDate, setAnalysisStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(1); // First day of current month
+    return d.toISOString().split('T')[0];
+  });
+  const [analysisEndDate, setAnalysisEndDate] = useState(() => {
+    return new Date().toISOString().split('T')[0]; // Today
+  });
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [aiReportHtml, setAiReportHtml] = useState<string | null>(null);
 
   const metrics = useMemo(() => {
     const completedTasks = tasks.filter(t => t.status === TaskStatus.Done && t.completedAt && t.createdAt);
+    const todoOrProgressTasks = tasks.filter(t => t.status !== TaskStatus.Done);
 
     const totalCycleTime = completedTasks.reduce((acc, task) => {
       return acc + calculateCycleTimeInDays(task.createdAt, task.completedAt!);
     }, 0);
 
     const averageCycleTime = completedTasks.length > 0 ? totalCycleTime / completedTasks.length : 0;
+    
+    // New Metrics Calculation
+    let totalDurationScore = 0;
+    let totalUrgencyScore = 0;
+
+    todoOrProgressTasks.forEach(t => {
+        totalDurationScore += DURATION_WEIGHTS[t.duration || '1 día'];
+        totalUrgencyScore += PRIORITY_WEIGHTS[t.priority || 'Baja'];
+    });
+
+    // Priority Distribution
+    const priorityDist: Record<TaskPriority, number> = {
+        'Baja': 0, 'Moderada': 0, 'Media': 0, 'Alta': 0, 'Urgente': 0
+    };
+    
+    tasks.forEach(t => {
+        const p = t.priority || 'Baja';
+        priorityDist[p] = (priorityDist[p] || 0) + 1;
+    });
 
     const projectMetrics = projects.map(project => {
         const projectTasks = tasks.filter(t => t.projectId === project.id);
@@ -58,6 +99,9 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ tasks, proje
         totalTasks: tasks.length,
         completedTasks: completedTasks.length,
         averageCycleTime: averageCycleTime,
+        totalDurationScore,
+        totalUrgencyScore,
+        priorityDist,
         projectMetrics: projectMetrics
     };
   }, [tasks, projects]);
@@ -65,7 +109,6 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ tasks, proje
   const handleGenerateReport = async () => {
     setIsGeneratingReport(true);
     try {
-      // A small timeout to allow UI update before blocking the main thread
       await new Promise(resolve => setTimeout(resolve, 50)); 
       await generateReport(tasks, projects, users);
     } catch (error) {
@@ -76,61 +119,220 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ tasks, proje
     }
   };
 
+  const handleRunAiAnalysis = async () => {
+    if (!analysisStartDate || !analysisEndDate) return;
+    setIsAnalyzing(true);
+    setAiReportHtml(null);
+    try {
+        const report = await generatePerformanceAnalysis(tasks, users, analysisStartDate, analysisEndDate);
+        setAiReportHtml(report);
+    } catch (error) {
+        console.error("AI Analysis failed", error);
+    } finally {
+        setIsAnalyzing(false);
+    }
+  };
+
+  // Effect to render Priority Chart
+  useEffect(() => {
+    if (priorityChartRef.current && metrics) {
+        if (chartInstanceRef.current) {
+            chartInstanceRef.current.destroy();
+        }
+
+        const labels = Object.keys(metrics.priorityDist);
+        const data = Object.values(metrics.priorityDist);
+        const bgColors = labels.map(l => PRIORITY_COLORS[l as TaskPriority]);
+
+        chartInstanceRef.current = new Chart(priorityChartRef.current, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Tareas por Prioridad',
+                    data: data,
+                    backgroundColor: bgColors,
+                    borderRadius: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false }
+                },
+                scales: {
+                    y: { beginAtZero: true, ticks: { precision: 0 } }
+                }
+            }
+        });
+    }
+
+    return () => {
+        if (chartInstanceRef.current) {
+            chartInstanceRef.current.destroy();
+        }
+    };
+  }, [metrics]);
+
 
   return (
     <div className="space-y-8">
-      <div className="flex justify-between items-start">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
             <h1 className="text-2xl font-bold text-gray-800">Métricas de Eficiencia</h1>
-            <p className="text-gray-600 mt-1">Un resumen del rendimiento de los proyectos y tareas.</p>
+            <p className="text-gray-600 mt-1">Un resumen del rendimiento, cargas de trabajo y prioridades.</p>
         </div>
         <button
           onClick={handleGenerateReport}
           disabled={isGeneratingReport}
-          className="flex items-center gap-2 px-4 py-2 bg-[#D85929] hover:bg-[#C0481A] text-white font-semibold rounded-md transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed whitespace-nowrap"
+          className="flex items-center gap-2 px-4 py-2 bg-[#D85929] hover:bg-[#C0481A] text-white font-semibold rounded-md transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed whitespace-nowrap self-end md:self-auto"
         >
           <DownloadIcon className="w-5 h-5" />
-          {isGeneratingReport ? 'Generando...' : 'Generar Reporte'}
+          {isGeneratingReport ? 'Generando...' : 'Generar Reporte PDF'}
         </button>
       </div>
       
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* Top Cards Row */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <MetricCard title="Total de Tareas" value={metrics.totalTasks.toString()} />
         <MetricCard title="Tareas Completadas" value={metrics.completedTasks.toString()} />
-        <MetricCard title="Tiempo de Ciclo Promedio" value={`${metrics.averageCycleTime.toFixed(1)} días`} />
+        <MetricCard 
+            title="Carga de Trabajo Est." 
+            value={metrics.totalDurationScore.toString()} 
+            subtitle="Puntos basados en duración de tareas pendientes"
+        />
+        <MetricCard 
+            title="Puntuación de Urgencia" 
+            value={metrics.totalUrgencyScore.toString()} 
+            subtitle="Puntos basados en prioridad de tareas pendientes"
+        />
+      </div>
+
+      {/* --- AI PERFORMANCE ANALYSIS SECTION --- */}
+      <div className="bg-gradient-to-r from-indigo-50 to-blue-50 p-6 rounded-xl border border-indigo-100 shadow-sm">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+            <div>
+                <h2 className="text-xl font-bold text-[#254467] flex items-center gap-2">
+                    <MagicIcon className="w-6 h-6 text-purple-600" />
+                    Análisis de Ciclo con IA
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">Genera un reporte cualitativo basado en las ponderaciones de tareas completadas en un periodo.</p>
+            </div>
+            <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3 w-full md:w-auto">
+                 <div className="flex items-center gap-2 bg-white p-2 rounded-lg border border-gray-200 shadow-sm">
+                    <span className="text-xs font-bold text-gray-500 uppercase px-1">Del:</span>
+                    <input 
+                        type="date" 
+                        value={analysisStartDate}
+                        onChange={(e) => setAnalysisStartDate(e.target.value)}
+                        className="text-sm text-gray-700 bg-transparent focus:outline-none"
+                    />
+                 </div>
+                 <div className="flex items-center gap-2 bg-white p-2 rounded-lg border border-gray-200 shadow-sm">
+                    <span className="text-xs font-bold text-gray-500 uppercase px-1">Al:</span>
+                    <input 
+                        type="date" 
+                        value={analysisEndDate}
+                        onChange={(e) => setAnalysisEndDate(e.target.value)}
+                        className="text-sm text-gray-700 bg-transparent focus:outline-none"
+                    />
+                 </div>
+                 <button 
+                    onClick={handleRunAiAnalysis}
+                    disabled={isAnalyzing}
+                    className="flex items-center gap-2 px-4 py-2 bg-[#254467] hover:bg-[#1a3350] text-white font-semibold rounded-lg transition-colors disabled:opacity-70 shadow-md w-full sm:w-auto justify-center"
+                 >
+                    {isAnalyzing ? (
+                        <span className="animate-pulse">Analizando...</span>
+                    ) : (
+                        <>
+                            <span>Generar Análisis</span>
+                            <ChartIcon className="w-4 h-4" />
+                        </>
+                    )}
+                 </button>
+            </div>
+        </div>
+        
+        {/* Report Container */}
+        {aiReportHtml && !isAnalyzing && (
+            <div className="bg-white rounded-lg p-6 shadow-inner border border-gray-200 animate-fade-in">
+                <div 
+                    className="prose max-w-none text-gray-700 space-y-4"
+                    dangerouslySetInnerHTML={{ __html: aiReportHtml }}
+                />
+                 <div className="mt-4 text-[10px] text-gray-400 text-right italic">
+                    Generado por Gemini AI basado en ponderaciones de Prioridad y Duración.
+                </div>
+            </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Priority Chart */}
+          <div className="bg-white p-6 rounded-lg shadow-md">
+             <h2 className="text-lg font-bold text-gray-800 mb-4">Distribución por Prioridad</h2>
+             <div className="h-64">
+                <canvas ref={priorityChartRef}></canvas>
+             </div>
+          </div>
+          
+          {/* Cycle Time Card (Reused logic, just highlighted) */}
+          <div className="bg-white p-6 rounded-lg shadow-md flex flex-col justify-center items-center text-center">
+             <h2 className="text-lg font-bold text-gray-800 mb-2">Tiempo de Ciclo Promedio</h2>
+             <div className="text-5xl font-bold text-[#254467] my-4">{metrics.averageCycleTime.toFixed(1)} <span className="text-lg text-gray-500 font-normal">días</span></div>
+             <p className="text-sm text-gray-500 max-w-xs">
+                Tiempo promedio desde la creación hasta la finalización de las tareas.
+             </p>
+          </div>
       </div>
 
       <div>
         <h2 className="text-xl font-bold text-gray-800 mb-4">Desglose por Proyecto</h2>
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
-          <table className="w-full text-sm text-left text-gray-500">
+          <table className="w-full text-xs sm:text-sm text-left text-gray-500">
             <thead className="text-xs text-gray-700 uppercase bg-gray-50">
               <tr>
-                <th scope="col" className="px-6 py-3">Proyecto</th>
-                <th scope="col" className="px-6 py-3 text-center">Tareas Totales</th>
-                <th scope="col" className="px-6 py-3 text-center">Tareas Completadas</th>
-                <th scope="col" className="px-6 py-3">Tasa de Finalización</th>
-                <th scope="col" className="px-6 py-3 text-right">Ciclo Promedio (días)</th>
+                <th scope="col" className="px-2 py-3 sm:px-4">Proyecto</th>
+                <th scope="col" className="px-1 py-3 sm:px-4 text-center">
+                    <span className="hidden sm:inline">Tareas Totales</span>
+                    <span className="sm:hidden">Tot.</span>
+                </th>
+                <th scope="col" className="px-1 py-3 sm:px-4 text-center">
+                    <span className="hidden sm:inline">Tareas Completadas</span>
+                    <span className="sm:hidden">Comp.</span>
+                </th>
+                <th scope="col" className="px-1 py-3 sm:px-4 text-center">
+                    <span className="hidden sm:inline">Tasa de Finalización</span>
+                    <span className="sm:hidden">%</span>
+                </th>
+                <th scope="col" className="px-1 py-3 sm:px-4 text-center">
+                    <span className="hidden sm:inline">Ciclo Promedio (días)</span>
+                    <span className="sm:hidden">Ciclo</span>
+                </th>
               </tr>
             </thead>
             <tbody>
               {metrics.projectMetrics.map(p => (
                 <tr key={p.id} className="bg-white border-b hover:bg-gray-50">
-                  <td className="px-6 py-4 font-medium text-gray-900 flex items-center gap-3">
-                    <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }}></span>
-                    {p.name}
+                  <td className="px-2 py-4 sm:px-4 font-medium text-gray-900">
+                     <div className="flex items-center gap-1.5 sm:gap-3">
+                        <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }}></span>
+                        <span className="truncate max-w-[60px] xs:max-w-[90px] sm:max-w-none block" title={p.name}>{p.name}</span>
+                     </div>
                   </td>
-                  <td className="px-6 py-4 text-center">{p.totalTasks}</td>
-                  <td className="px-6 py-4 text-center">{p.completedTasks}</td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <div className="w-full bg-gray-200 rounded-full h-2.5">
+                  <td className="px-1 py-4 sm:px-4 text-center">{p.totalTasks}</td>
+                  <td className="px-1 py-4 sm:px-4 text-center">{p.completedTasks}</td>
+                  <td className="px-1 py-4 sm:px-4">
+                    <div className="flex items-center justify-center gap-2">
+                      <div className="hidden sm:block w-full bg-gray-200 rounded-full h-2.5 max-w-[80px]">
                         <div className="bg-[#254467] h-2.5 rounded-full" style={{ width: `${p.completionRate}%` }}></div>
                       </div>
-                      <span className="font-medium text-gray-700">{p.completionRate.toFixed(0)}%</span>
+                      <span className="font-medium text-gray-700 text-xs sm:text-sm">{p.completionRate.toFixed(0)}%</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-right font-medium">{p.averageCycleTime.toFixed(1)}</td>
+                  <td className="px-1 py-4 sm:px-4 text-center font-medium">{p.averageCycleTime.toFixed(1)}</td>
                 </tr>
               ))}
               {metrics.projectMetrics.length === 0 && (

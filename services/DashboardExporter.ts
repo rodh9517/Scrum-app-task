@@ -1,35 +1,56 @@
+
 import { Task, Project, User } from '../types';
 
 declare const jspdf: any;
 declare const html2canvas: any;
 
-const LOGO_SVG_STRING = `<svg viewBox="0 0 210 75" xmlns="http://www.w3.org/2000/svg" fontFamily="sans-serif"><g transform="translate(81, 0)"><path fillRule="evenodd" clipRule="evenodd" d="M0 0H16V16H0V0ZM0 24V40H16V24H0ZM16 16H32V24H16V16ZM32 0V40H48V0H32ZM16 40L32 24V40H16Z" fill="#D85929"></path></g><text x="105" y="68" fontSize="24" fontWeight="bold" fill="#254467" textAnchor="middle">HERMOSILLO<tspan fontSize="10" dy="-12">®</tspan></text></svg>`;
+// COMPLETE LOGO (ICON + TEXT) AS SVG
+// This ensures the text fonts and placement are identical in the PDF without relying on browser rendering.
+const LOGO_SVG_STRING = `
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="150" viewBox="0 0 200 50">
+  <g transform="translate(4, 8) scale(1.1)">
+     <path fill="#D85929" d="M0,0 V12 H10 V0 H22 V12 H38 L26,22 V33 H15 V22 H10 V33 H0 V0 Z" />
+  </g>
+  <g transform="translate(54, 0)">
+     <text x="0" y="24" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="22" fill="#254467" letter-spacing="-1">HERMOSILLO</text>
+     <text x="148" y="14" font-family="Arial, sans-serif" font-weight="bold" font-size="6" fill="#254467">®</text>
+     <text x="0" y="39" font-family="Arial, sans-serif" font-weight="500" font-size="9.5" fill="#D85929" letter-spacing="0.5">Experience Matters</text>
+     <text x="92" y="34" font-family="Arial, sans-serif" font-weight="bold" font-size="4" fill="#D85929">®</text>
+  </g>
+</svg>
+`;
 
-// Helper to convert SVG to PNG
-const svgToPngDataURL = (svgString: string, width: number, height: number): Promise<string> => {
-    return new Promise((resolve, reject) => {
+const LOGO_DATA_URL = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(LOGO_SVG_STRING)))}`;
+
+
+// Helper to convert Image URL to Data URL
+const urlToDataUrl = (url: string): Promise<string> => {
+    return new Promise((resolve) => {
         const img = new Image();
-        const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-        const url = URL.createObjectURL(svgBlob);
+        img.crossOrigin = "Anonymous"; 
+        
         img.onload = () => {
             const canvas = document.createElement('canvas');
-            // Render at 2x for better quality
-            canvas.width = width * 2;
-            canvas.height = height * 2;
+            // Scale up for better resolution in PDF
+            canvas.width = img.width * 2;
+            canvas.height = img.height * 2;
             const ctx = canvas.getContext('2d');
             if (ctx) {
                 ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                const pngDataUrl = canvas.toDataURL('image/png');
-                URL.revokeObjectURL(url);
-                resolve(pngDataUrl);
+                try {
+                    const dataUrl = canvas.toDataURL('image/png');
+                    resolve(dataUrl);
+                } catch (error) {
+                    console.warn("Could not process logo:", error);
+                    resolve(''); 
+                }
             } else {
-                URL.revokeObjectURL(url);
-                reject(new Error('Could not get canvas context'));
+                resolve('');
             }
         };
-        img.onerror = (e) => {
-            URL.revokeObjectURL(url);
-            reject(new Error('Failed to load SVG image'));
+        img.onerror = () => {
+            console.warn("Failed to load logo image for PDF export");
+            resolve('');
         };
         img.src = url;
     });
@@ -52,39 +73,83 @@ export const exportDashboardAsPDF = async (
   const margin = 40;
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
-  const logoWidth = 70;
-  const logoHeight = 25;
+  
+  // Adjusted dimensions for the logo to match aspect ratio of the full SVG
+  const logoWidth = 140; 
+  const logoHeight = 35; 
 
-  const logoPngDataUrl = await svgToPngDataURL(LOGO_SVG_STRING, logoWidth, logoHeight);
+  // Use the constant Base64 URL directly instead of converting from an external URL.
+  // This avoids network dependency and tainting the canvas.
+  const logoPngDataUrl = await urlToDataUrl(LOGO_DATA_URL);
 
   // --- KANBAN BOARD SECTION ---
   doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
+  doc.setTextColor(37, 68, 103); // #254467
   doc.text('Vista de Tablero Kanban', margin, margin - 10);
-  doc.addImage(logoPngDataUrl, 'PNG', pageWidth - margin - logoWidth, margin - 30, logoWidth, logoHeight);
-
-  const canvas = await html2canvas(kanbanElement, {
-    scale: 2, // Higher scale for better quality
-    useCORS: true,
-    backgroundColor: '#f3f4f6' // Match app background
-  });
   
-  const imgData = canvas.toDataURL('image/jpeg', 0.9);
-  const imgProps = doc.getImageProperties(imgData);
+  if (logoPngDataUrl) {
+      doc.addImage(logoPngDataUrl, 'PNG', pageWidth - margin - logoWidth, margin - 35, logoWidth, logoHeight);
+  }
+
+  // --- LOGIC CHANGE FOR MOBILE EXPORT ---
+  // 1. Clone the element to avoid modifying the live UI
+  const clone = kanbanElement.cloneNode(true) as HTMLElement;
+
+  // 2. Force DESKTOP specific styling on the clone
+  clone.style.width = '1280px';
+  clone.style.position = 'absolute';
+  clone.style.top = '-10000px'; // Hide it off-screen
+  clone.style.left = '0';
+  clone.style.backgroundColor = '#f3f4f6'; 
+  clone.style.zIndex = '-9999';
+
+  // 3. Force Grid Layout for Kanban
+  const gridContainer = clone.querySelector('.grid');
+  if (gridContainer instanceof HTMLElement) {
+      gridContainer.style.gridTemplateColumns = 'repeat(3, minmax(0, 1fr))';
+  }
+
+  // 4. Append clone to body so html2canvas can render it
+  document.body.appendChild(clone);
+
+  let imgData;
+  let imgProps;
+
+  try {
+      // 5. Capture the clone
+      const canvas = await html2canvas(clone, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#f3f4f6',
+        windowWidth: 1280,
+        width: 1280
+      });
+
+      imgData = canvas.toDataURL('image/jpeg', 0.9);
+      imgProps = doc.getImageProperties(imgData);
+
+  } finally {
+      // 6. Clean up
+      if (document.body.contains(clone)) {
+          document.body.removeChild(clone);
+      }
+  }
   
   const contentStartY = margin + 10;
   const availableWidth = pageWidth - margin * 2;
-  const availableHeight = pageHeight - contentStartY - (margin / 2); // Room for footer
+  const availableHeight = pageHeight - contentStartY - (margin / 2);
 
   let imgWidth = availableWidth;
   let imgHeight = (imgProps.height * imgWidth) / imgProps.width;
 
+  // If height is too tall for one page, fit by height instead
   if (imgHeight > availableHeight) {
       imgHeight = availableHeight;
       imgWidth = (imgProps.width * imgHeight) / imgProps.height;
   }
 
-  const x = (pageWidth - imgWidth) / 2; // Center the image
+  const x = (pageWidth - imgWidth) / 2;
   doc.addImage(imgData, 'JPEG', x, contentStartY, imgWidth, imgHeight);
 
 
@@ -92,8 +157,12 @@ export const exportDashboardAsPDF = async (
   doc.addPage();
   doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
-  doc.text('Vista de Lista de Tareas', margin, margin - 10);
-  doc.addImage(logoPngDataUrl, 'PNG', pageWidth - margin - logoWidth, margin - 30, logoWidth, logoHeight);
+  doc.setTextColor(37, 68, 103); // #254467
+  doc.text('Resumen de Tareas Principales', margin, margin - 10);
+  
+  if (logoPngDataUrl) {
+      doc.addImage(logoPngDataUrl, 'PNG', pageWidth - margin - logoWidth, margin - 35, logoWidth, logoHeight);
+  }
 
   const projectMap = Object.fromEntries(projects.map(p => [p.id, p.name]));
   const userMap = Object.fromEntries(users.map(u => [u.id, u.name]));
@@ -129,9 +198,83 @@ export const exportDashboardAsPDF = async (
     },
   });
   
+  // --- SUBTASK MATRIX SECTION ---
+  
+  // Calculate start position for the next table
+  let finalY = (doc as any).lastAutoTable.finalY || contentStartY;
+  
+  // Check if we need a new page for the matrix title
+  if (finalY > pageHeight - 100) {
+      doc.addPage();
+      finalY = margin + 10;
+  } else {
+      finalY += 30; // Spacing between tables
+  }
+
+  doc.setFontSize(16);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(37, 68, 103);
+  doc.text('Matriz de Detalles de Subtareas', margin, finalY - 10);
+
+  // Flatten tasks to get all subtasks
+  const subtaskRows: any[] = [];
+  tasks.forEach(task => {
+      if (task.subtasks && task.subtasks.length > 0) {
+          task.subtasks.forEach(sub => {
+              subtaskRows.push([
+                  task.title, // Tarea Principal
+                  sub.text,   // Descripción Subtarea
+                  sub.completed ? 'Completada' : 'Pendiente' // Estatus
+              ]);
+          });
+      }
+  });
+
+  if (subtaskRows.length > 0) {
+      (doc as any).autoTable({
+          head: [['Tarea Principal', 'Descripción de Subtarea', 'Estatus']],
+          body: subtaskRows,
+          startY: finalY,
+          margin: { left: margin, right: margin },
+          theme: 'grid',
+          headStyles: {
+              fillColor: '#254467',
+              textColor: '#FFFFFF',
+              fontStyle: 'bold'
+          },
+          columnStyles: {
+              0: { cellWidth: 150, fontStyle: 'bold', textColor: 50 }, // Main Task Title
+              1: { cellWidth: 'auto' },
+              2: { cellWidth: 80, halign: 'center' }
+          },
+          styles: {
+              font: 'helvetica',
+              fontSize: 8,
+              cellPadding: 4,
+          },
+          didParseCell: function(data: any) {
+              // Add visual cues for status
+              if (data.section === 'body' && data.column.index === 2) {
+                  if (data.cell.raw === 'Completada') {
+                      data.cell.styles.textColor = [46, 204, 113]; // Green
+                      data.cell.styles.fontStyle = 'bold';
+                  } else {
+                      data.cell.styles.textColor = [231, 76, 60]; // Red
+                  }
+              }
+          }
+      });
+  } else {
+      doc.setFontSize(10);
+      doc.setTextColor(150);
+      doc.text('No hay subtareas registradas en este tablero.', margin, finalY + 10);
+  }
+
+
   // --- FOOTER ---
   const pageCount = (doc as any).internal.getNumberOfPages();
   doc.setFontSize(8);
+  doc.setTextColor(100);
   for (let i = 1; i <= pageCount; i++) {
       doc.setPage(i);
       doc.text(`Página ${i} de ${pageCount}`, pageWidth - margin, pageHeight - 10, { align: 'right' });

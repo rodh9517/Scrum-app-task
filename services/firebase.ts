@@ -109,6 +109,10 @@ export interface WorkspaceData {
     name?: string;
     isPersonal?: boolean;
     memberIds?: string[]; 
+    // Added fields
+    icon?: string;
+    theme?: string;
+    order?: number;
 }
 
 export const subscribeToWorkspace = (workspaceId: string, callback: (data: WorkspaceData | null) => void) => {
@@ -145,7 +149,10 @@ export const subscribeToUserWorkspaces = (userId: string, callback: (workspaces:
                     id: doc.id,
                     name: data.name,
                     isPersonal: !!data.isPersonal,
-                    members: data.users
+                    members: data.users,
+                    icon: data.icon,
+                    theme: data.theme,
+                    order: data.order
                 });
             }
         });

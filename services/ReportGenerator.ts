@@ -1,3 +1,4 @@
+
 import { Task, Project, User, TaskStatus } from '../types';
 
 // Declare global variables from CDNs
@@ -12,42 +13,54 @@ const STATUS_DONE_COLOR = '#50E3C2';
 const STATUS_INPROGRESS_COLOR = '#4A90E2';
 const STATUS_TODO_COLOR = '#F5A623';
 
-const LINE_IDEAL_COLOR = '#9CA3AF';
-const TEXT_PRIMARY_DARK_BG = '#FFFFFF';
 const TEXT_PRIMARY_LIGHT_BG = '#1F2937';
 const TEXT_SECONDARY_LIGHT_BG = '#6B7280';
 const TABLE_HEADER_COLOR = '#E5E7EB';
-const BORDER_COLOR = '#D1D5DB';
 
-// --- LOGO FOR DARK BACKGROUND ---
-const LOGO_FOR_DARK_BG_SVG_STRING = `<svg viewBox="0 0 210 75" xmlns="http://www.w3.org/2000/svg" fontFamily="sans-serif"><g transform="translate(81, 0)"><path fillRule="evenodd" clipRule="evenodd" d="M0 0H16V16H0V0ZM0 24V40H16V24H0ZM16 16H32V24H16V16ZM32 0V40H48V0H32ZM16 40L32 24V40H16Z" fill="#D85929"></path></g><text x="105" y="68" fontSize="24" fontWeight="bold" fill="#FFFFFF" textAnchor="middle">HERMOSILLO<tspan fontSize="10" dy="-12">®</tspan></text></svg>`;
+// --- LOGO CONFIG ---
+// Embedded SVG logo (Icon + Text) to ensure PDF export works without external dependencies
+const LOGO_SVG_STRING = `
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="150" viewBox="0 0 200 50">
+  <g transform="translate(4, 8) scale(1.1)">
+     <path fill="#D85929" d="M0,0 V12 H10 V0 H22 V12 H38 L26,22 V33 H15 V22 H10 V33 H0 V0 Z" />
+  </g>
+  <g transform="translate(54, 0)">
+     <text x="0" y="24" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="22" fill="#254467" letter-spacing="-1">HERMOSILLO</text>
+     <text x="148" y="14" font-family="Arial, sans-serif" font-weight="bold" font-size="6" fill="#254467">®</text>
+     <text x="0" y="39" font-family="Arial, sans-serif" font-weight="500" font-size="9.5" fill="#D85929" letter-spacing="0.5">Experience Matters</text>
+     <text x="92" y="34" font-family="Arial, sans-serif" font-weight="bold" font-size="4" fill="#D85929">®</text>
+  </g>
+</svg>
+`;
 
-// Helper to convert SVG to PNG
-const svgToPngDataURL = (svgString: string, width: number, height: number): Promise<string> => {
-    return new Promise((resolve, reject) => {
+const LOGO_DATA_URL = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(LOGO_SVG_STRING)))}`;
+
+// Helper to convert URL to Data URL
+const urlToDataUrl = (url: string): Promise<string> => {
+    return new Promise((resolve) => {
         const img = new Image();
-        const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-        const url = URL.createObjectURL(svgBlob);
+        img.crossOrigin = "Anonymous";
+        
         img.onload = () => {
             const canvas = document.createElement('canvas');
-            // Render at 2x for better quality
-            canvas.width = width * 2;
-            canvas.height = height * 2;
+            // Scale up for better resolution
+            canvas.width = img.width * 2;
+            canvas.height = img.height * 2;
             const ctx = canvas.getContext('2d');
             if (ctx) {
                 ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                const pngDataUrl = canvas.toDataURL('image/png');
-                URL.revokeObjectURL(url);
-                resolve(pngDataUrl);
+                try {
+                    const dataUrl = canvas.toDataURL('image/png');
+                    resolve(dataUrl);
+                } catch (e) {
+                    console.warn("Report logo tainted", e);
+                    resolve('');
+                }
             } else {
-                URL.revokeObjectURL(url);
-                reject(new Error('Could not get canvas context'));
+                resolve('');
             }
         };
-        img.onerror = (e) => {
-            URL.revokeObjectURL(url);
-            reject(new Error('Failed to load SVG image'));
-        };
+        img.onerror = () => resolve('');
         img.src = url;
     });
 };
@@ -227,9 +240,9 @@ export const generateReport = async (tasks: Task[], projects: Project[], users: 
     const statusChartImage = await renderChartToImage(statusChartConfig, 400, 400);
     const projectChartImage = await renderChartToImage(projectChartConfig, 800, 600);
     
-    const logoWidth = 70;
-    const logoHeight = 25;
-    const logoForDarkBgPngDataUrl = await svgToPngDataURL(LOGO_FOR_DARK_BG_SVG_STRING, logoWidth, logoHeight);
+    const logoWidth = 140;
+    const logoHeight = 35;
+    const logoPngDataUrl = await urlToDataUrl(LOGO_DATA_URL);
 
 
     // --- PDF LAYOUT ---
@@ -241,19 +254,21 @@ export const generateReport = async (tasks: Task[], projects: Project[], users: 
     const contentWidth = pageWidth - margin * 2;
     
     // Header
-    doc.setFillColor(PRIMARY_BRAND_COLOR);
-    doc.rect(0, 0, pageWidth, 60, 'F');
     doc.setFont(FONT_FAMILY, 'bold');
     doc.setFontSize(22);
-    doc.setTextColor(TEXT_PRIMARY_DARK_BG);
+    doc.setTextColor(PRIMARY_BRAND_COLOR); // Brand Blue for title
     doc.text('Reporte de Productividad', margin, 35);
+    
     doc.setFontSize(10);
     doc.setFont(FONT_FAMILY, 'normal');
+    doc.setTextColor(TEXT_SECONDARY_LIGHT_BG); // Gray for date
     doc.text(new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' }), margin, 48);
     
     // Add logo to the header
     const logoY = (60 - logoHeight) / 2;
-    doc.addImage(logoForDarkBgPngDataUrl, 'PNG', pageWidth - margin - logoWidth, logoY, logoWidth, logoHeight);
+    if (logoPngDataUrl) {
+        doc.addImage(logoPngDataUrl, 'PNG', pageWidth - margin - logoWidth, logoY, logoWidth, logoHeight);
+    }
 
     let yPos = 80; // Start content below header
 
@@ -277,22 +292,24 @@ export const generateReport = async (tasks: Task[], projects: Project[], users: 
     // --- TASK LIST TABLE ---
     doc.setFontSize(14);
     doc.setFont(FONT_FAMILY, 'bold');
-    doc.text('Detalle de Tareas Recientes (Hasta 10)', margin, yPos);
+    doc.text('Detalle de Tareas Recientes (Hasta 15)', margin, yPos);
     
     const projectMap = Object.fromEntries(projects.map(p => [p.id, p]));
-    const userMap = Object.fromEntries(users.map(u => [u.id, u]));
+    const userMap = Object.fromEntries(users.map(u => [u.id, u.name]));
 
     const recentTasks = [...tasks]
         .sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-        .slice(0, 10);
+        .slice(0, 15);
     
     (doc as any).autoTable({
       startY: yPos + 10,
-      head: [['Título', 'Proyecto', 'Responsable', 'Estado']],
+      head: [['Título', 'Proyecto', 'Responsable', 'Prioridad', 'Duración', 'Estado']],
       body: recentTasks.map(task => [
         task.title,
         projectMap[task.projectId]?.name || 'N/A',
-        userMap[task.responsibleId]?.name || 'N/A',
+        userMap[task.responsibleId] || 'N/A',
+        task.priority || 'Baja',
+        task.duration || '1 día',
         task.status
       ]),
       theme: 'grid',

@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { Message, User, Task, Project, TaskStatus } from '../types';
 import { TrashIcon, LinkIcon } from './Icons';
@@ -23,6 +24,7 @@ interface MessageBoardProps {
   focusedTaskId: string | null;
   onClearFocus: () => void;
   currentUser: UserProfile | null;
+  isReadOnly?: boolean;
 }
 
 // --- MessageCard Component ---
@@ -35,9 +37,10 @@ interface MessageCardProps {
   onDelete: (messageId: string) => void;
   onNavigateToTask: (taskId: string) => void;
   isCurrentUser: boolean;
+  isReadOnly?: boolean;
 }
 
-const MessageCard: React.FC<MessageCardProps> = ({ message, user, task, project, onUpdate, onDelete, onNavigateToTask, isCurrentUser }) => {
+const MessageCard: React.FC<MessageCardProps> = ({ message, user, task, project, onUpdate, onDelete, onNavigateToTask, isCurrentUser, isReadOnly }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(message.text);
   
@@ -111,7 +114,7 @@ const MessageCard: React.FC<MessageCardProps> = ({ message, user, task, project,
                 <p className="text-xs text-gray-500">{timeAgo(message.createdAt)}</p>
               </div>
             </div>
-            {isCurrentUser && (
+            {isCurrentUser && !isReadOnly && (
             <div className="flex items-center gap-2">
               <button onClick={() => setIsEditing(true)} className="text-xs font-semibold text-gray-600 hover:text-[#254467]">Editar</button>
               <button onClick={handleDelete} className="text-gray-500 hover:text-red-600" aria-label="Eliminar mensaje">
@@ -196,7 +199,7 @@ const AddMessageForm: React.FC<AddMessageFormProps> = ({ tasks, onAddMessage }) 
 
 
 // --- Main MessageBoard Component ---
-export const MessageBoard: React.FC<MessageBoardProps> = ({ messages, users, tasks, projects, onAddMessage, onUpdateMessage, onDeleteMessage, onNavigateToTask, focusedTaskId, onClearFocus, currentUser }) => {
+export const MessageBoard: React.FC<MessageBoardProps> = ({ messages, users, tasks, projects, onAddMessage, onUpdateMessage, onDeleteMessage, onNavigateToTask, focusedTaskId, onClearFocus, currentUser, isReadOnly }) => {
   const userMap = useMemo(() => 
     users.reduce((acc, u) => ({ ...acc, [u.id]: u }), {} as Record<string, User>), 
   [users]);
@@ -228,7 +231,7 @@ export const MessageBoard: React.FC<MessageBoardProps> = ({ messages, users, tas
 
   return (
     <div>
-      <AddMessageForm tasks={tasks} onAddMessage={onAddMessage} />
+      {!isReadOnly && <AddMessageForm tasks={tasks} onAddMessage={onAddMessage} />}
 
       {focusedTask && (
         <div className="mb-6 bg-blue-50 border border-blue-200 p-3 rounded-md flex justify-between items-center">
@@ -255,12 +258,13 @@ export const MessageBoard: React.FC<MessageBoardProps> = ({ messages, users, tas
                     onDelete={onDeleteMessage}
                     onNavigateToTask={onNavigateToTask}
                     isCurrentUser={currentUser?.sub === message.userId}
+                    isReadOnly={isReadOnly}
                 />
             );
         })}
          {displayedMessages.length === 0 && (
           <div className="col-span-full text-center text-gray-500 py-16 border-2 border-dashed border-gray-300 rounded-lg">
-            {focusedTaskId ? 'No hay mensajes vinculados a esta tarea.' : 'La pizarra está vacía. ¡Sé el primero en dejar un mensaje!'}
+            {focusedTaskId ? 'No hay mensajes vinculados a esta tarea.' : (isReadOnly ? 'No hay mensajes en la pizarra.' : 'La pizarra está vacía. ¡Sé el primero en dejar un mensaje!')}
           </div>
         )}
       </div>

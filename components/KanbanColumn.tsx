@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Task, Project, User, TaskStatus, Message } from '../types';
 import { TaskCard } from './TaskCard';
@@ -15,27 +16,40 @@ interface KanbanColumnProps {
   onDeleteTask: (taskId: string) => void;
   highlightedTaskId: string | null;
   onNavigateToTaskMessages: (taskId: string) => void;
+  collapsedTaskIds: Set<string>;
+  onToggleTaskCollapse: (taskId: string) => void;
+  isReadOnly?: boolean;
+  onMoveTask: (taskId: string, newStatus: TaskStatus, newIndex: number) => void;
 }
 
-export const KanbanColumn: React.FC<KanbanColumnProps> = ({ title, status, tasks, projects, users, messages, onUpdateTask, onUpdateTaskStatus, onGenerateSubtasks, onDeleteTask, highlightedTaskId, onNavigateToTaskMessages }) => {
+export const KanbanColumn: React.FC<KanbanColumnProps> = ({ 
+  title, status, tasks, projects, users, messages, onUpdateTask, onUpdateTaskStatus, onGenerateSubtasks, onDeleteTask, highlightedTaskId, onNavigateToTaskMessages,
+  collapsedTaskIds, onToggleTaskCollapse, isReadOnly, onMoveTask
+}) => {
   const [isDragOver, setIsDragOver] = useState(false);
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    if (isReadOnly) return;
     e.preventDefault();
     setIsDragOver(true);
   };
 
   const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    if (isReadOnly) return;
     e.preventDefault();
     setIsDragOver(false);
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    if (isReadOnly) return;
     e.preventDefault();
     setIsDragOver(false);
     const taskId = e.dataTransfer.getData('text/plain');
-    if (taskId) {
-      onUpdateTaskStatus(taskId, status);
+    
+    // Check if it's a task ID (simple string) or subtask (complex string with colons)
+    if (taskId && !taskId.includes(':')) {
+        // If dropped on the column background, append to the end
+        onMoveTask(taskId, status, tasks.length);
     }
   };
 
@@ -53,10 +67,11 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({ title, status, tasks
         </span>
       </h2>
       <div className="space-y-4">
-        {tasks.map(task => (
+        {tasks.map((task, index) => (
           <TaskCard
             key={task.id}
             task={task}
+            index={index} // Pass index for reordering
             project={projects.find(p => p.id === task.projectId)}
             user={users.find(u => u.id === task.responsibleId)}
             users={users}
@@ -66,10 +81,15 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({ title, status, tasks
             onDeleteTask={onDeleteTask}
             highlightedTaskId={highlightedTaskId}
             onNavigateToTaskMessages={onNavigateToTaskMessages}
+            isCollapsed={collapsedTaskIds.has(task.id)}
+            onToggleCollapse={() => onToggleTaskCollapse(task.id)}
+            isReadOnly={isReadOnly}
+            onMoveTask={onMoveTask}
+            status={status}
           />
         ))}
         {tasks.length === 0 && (
-          <div className="text-center text-gray-500 py-8 border-2 border-dashed border-gray-300 rounded-lg">
+          <div className="text-center text-gray-500 py-8 border-2 border-dashed border-gray-300 rounded-lg pointer-events-none">
             No hay tareas aquí
           </div>
         )}

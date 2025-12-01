@@ -1,3 +1,4 @@
+
 import React, { createContext, useState, useContext, ReactNode } from 'react';
 import { Notification, NotificationType } from '../types';
 import { NotificationContainer } from '../components/Notifications';
@@ -5,6 +6,8 @@ import { NotificationContainer } from '../components/Notifications';
 interface NotificationContextType {
   addNotification: (message: string, type: NotificationType, onClick?: () => void) => void;
   history: Notification[];
+  unreadCount: number;
+  markAllAsRead: () => void;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -32,6 +35,7 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
       type,
       createdAt: Date.now(),
       onClick,
+      read: false, // Default to unread
     };
 
     setActiveToasts(prev => [...prev, newNotification]);
@@ -45,12 +49,18 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
   const removeToast = (id: string) => {
     setActiveToasts(prev => prev.filter(n => n.id !== id));
   };
+
+  const markAllAsRead = () => {
+    setHistory(prev => prev.map(n => ({ ...n, read: true })));
+  };
+
+  const unreadCount = history.filter(n => !n.read).length;
   
   // FIX: Replaced JSX with React.createElement to be compatible with a .ts file extension.
   // The original JSX syntax caused parsing errors because this file is not a .tsx file.
   return React.createElement(
     NotificationContext.Provider,
-    { value: { addNotification, history } },
+    { value: { addNotification, history, unreadCount, markAllAsRead } },
     children,
     React.createElement(NotificationContainer, {
       toasts: activeToasts,
