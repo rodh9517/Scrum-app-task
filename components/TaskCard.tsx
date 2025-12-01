@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Task, Project, User, Message, Subtask, TaskStatus, TaskPriority, TaskDuration } from '../types';
-import { PlusCircleIcon, MagicIcon, TrashIcon, UserCircleIcon, ChatBubbleIcon, PencilIcon, CheckIcon, XMarkIcon, ChevronUpIcon, ChevronDownIcon } from './Icons';
+import { PlusCircleIcon, MagicIcon, TrashIcon, UserCircleIcon, ChatBubbleIcon, PencilIcon, CheckIcon, XMarkIcon, ChevronUpIcon, ChevronDownIcon, ArchiveBoxArrowDownIcon } from './Icons';
 import { UserAvatar } from './UserAvatar';
 import { PRIORITY_COLORS, PRIORITY_WEIGHTS, DURATION_WEIGHTS } from '../constants';
 
@@ -262,6 +262,12 @@ export const TaskCard: React.FC<TaskCardProps> = ({
       setShowDurationMenu(false);
   };
 
+  const handleArchive = () => {
+    if (onMoveTask) {
+        onMoveTask(task.id, TaskStatus.Archived, 0);
+    }
+  };
+
 
   const priority = task.priority || 'Baja';
   const priorityColor = PRIORITY_COLORS[priority];
@@ -328,6 +334,18 @@ export const TaskCard: React.FC<TaskCardProps> = ({
              </div>
           ) : (
              <>
+                {/* Archive Button - Only for DONE tasks */}
+                {!isReadOnly && task.status === TaskStatus.Done && (
+                    <button
+                        onClick={handleArchive}
+                        className="text-gray-400 hover:text-purple-600 p-0.5 mr-1"
+                        aria-label="Mover a Histórico"
+                        title="Mover a Histórico (Archivar)"
+                    >
+                        <ArchiveBoxArrowDownIcon className="w-4 h-4" />
+                    </button>
+                )}
+
                  {!isReadOnly && (
                     <button
                         onClick={startTaskEditing}

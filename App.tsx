@@ -1,27 +1,29 @@
+
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { KanbanBoard } from './components/KanbanBoard';
 import { ListView } from './components/ListView';
 import { MetricsDashboard } from './components/MetricsDashboard';
 import { MessageBoard } from './components/MessageBoard';
-import { BacklogView } from './components/BacklogView'; // NEW IMPORT
+import { BacklogView } from './components/BacklogView';
+import { HistoryView } from './components/HistoryView'; // NEW IMPORT
 import AddTaskModal from './components/AddTaskModal';
 import AdminProjectsModal from './components/AdminProjectsModal';
 import { Login } from './components/Login';
 import { Logo } from './components/Logo';
-import { ListIcon, KanbanIcon, PlusIcon, SettingsIcon, ChartIcon, MessageBoardIcon, BellIcon, InfoCircleIcon, CheckCircleIcon, DownloadIcon, SwitchIcon, EllipsisVerticalIcon, LogoutIcon, FilterIcon, ArrowsPointingInIcon, ArrowsPointingOutIcon, MicrophoneIcon, UserCircleIcon, ArchiveBoxIcon } from './components/Icons'; // ArchiveBoxIcon added
+import { ListIcon, KanbanIcon, PlusIcon, SettingsIcon, ChartIcon, MessageBoardIcon, BellIcon, InfoCircleIcon, CheckCircleIcon, DownloadIcon, SwitchIcon, EllipsisVerticalIcon, LogoutIcon, FilterIcon, ArrowsPointingInIcon, ArrowsPointingOutIcon, MicrophoneIcon, UserCircleIcon, ArchiveBoxIcon, ClockIcon } from './components/Icons'; // ClockIcon added
 import { UserAvatar } from './components/UserAvatar';
 import { Project, Task, TaskStatus, User, Message, NotificationType, Subtask } from './types';
 import { generateSubtasks, parseTaskFromVoice } from './services/geminiService';
 import { useNotifications } from './hooks/useNotifications';
 import { useUserData } from './hooks/useUserData';
 import { timeAgo } from './utils/time';
-import { repairMojibake } from './utils/stringUtils'; // Import helper
+import { repairMojibake } from './utils/stringUtils';
 import { exportDashboardAsPDF } from './services/DashboardExporter';
 import { WorkspaceSelector } from './components/WorkspaceSelector';
 import { isSupabaseConfigured } from './services/supabase';
 import { VoiceCommandModal } from './components/VoiceCommandModal';
 
-type ViewMode = 'kanban' | 'list' | 'metrics' | 'board' | 'backlog'; // Added backlog
+type ViewMode = 'kanban' | 'list' | 'metrics' | 'board' | 'backlog' | 'history'; // Added history
 
 interface UserProfile {
   name: string;
@@ -36,7 +38,6 @@ const getInitialProfile = (): UserProfile | null => {
     const item = window.localStorage.getItem('scrum_user_profile');
     if (item) {
         const profile = JSON.parse(item);
-        // Repair name if it was stored with encoding errors
         if (profile.name) {
             profile.name = repairMojibake(profile.name);
         }
@@ -49,19 +50,16 @@ const getInitialProfile = (): UserProfile | null => {
   }
 };
 
-// Helper to decode JWT with correct UTF-8 handling and padding fix
 const decodeJwt = (token: string): any => {
     try {
         const base64Url = token.split('.')[1];
         let base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
         
-        // Add padding if necessary
         const padding = base64.length % 4;
         if (padding) {
             base64 += '='.repeat(4 - padding);
         }
         
-        // Use TextDecoder for robust UTF-8 decoding
         const binaryString = window.atob(base64);
         const bytes = new Uint8Array(binaryString.length);
         for (let i = 0; i < binaryString.length; i++) {
@@ -80,7 +78,6 @@ const decodeJwt = (token: string): any => {
 export function App() {
   const [userProfile, setUserProfile] = useState<UserProfile | null>(getInitialProfile);
   const [authToken, setAuthToken] = useState<string | null>(null);
-  // Use localStorage for persistence across sessions/reloads
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(() => localStorage.getItem('scrum_workspace_id'));
   
   const { addNotification, history: notificationHistory, unreadCount, markAllAsRead } = useNotifications();
@@ -91,7 +88,7 @@ export function App() {
     users, setUsers,
     messages, setMessages,
     isDataLoaded,
-    isWorkspacesListLoaded, // New flag to prevent premature redirection
+    isWorkspacesListLoaded,
     personalWorkspace,
     collaborativeWorkspaces,
     addCollaborativeWorkspace,
@@ -100,12 +97,12 @@ export function App() {
     reorderWorkspaces,
     isFirebaseConfigured,
     addUser,
-    moveTask // New function for DnD reordering
+    moveTask
   } = useUserData(userProfile, selectedWorkspaceId, authToken, addNotification);
 
   const [viewMode, setViewMode] = useState<ViewMode>('kanban');
   const [isAddTaskModalOpen, setAddTaskModalOpen] = useState(false);
-  const [taskToPromote, setTaskToPromote] = useState<Task | null>(null); // State for backlog promotion
+  const [taskToPromote, setTaskToPromote] = useState<Task | null>(null);
 
   const [isAdminProjectsModalOpen, setAdminProjectsModalOpen] = useState(false);
   const [isNotificationHistoryOpen, setNotificationHistoryOpen] = useState(false);
@@ -116,35 +113,27 @@ export function App() {
   
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
 
-  // State for project filter: 'ALL' or projectId
   const [filterProjectId, setFilterProjectId] = useState<string>('ALL');
-  
-  // State for "Assigned to Me" filter
   const [filterAssignedToMe, setFilterAssignedToMe] = useState<boolean>(false);
-  
-  // State for managing collapsed tasks
   const [collapsedTaskIds, setCollapsedTaskIds] = useState<Set<string>>(new Set());
 
   const exportContainerRef = useRef<HTMLDivElement>(null);
   const notificationMenuRef = useRef<HTMLDivElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
   
-  // Determine if user is a guest (starts with 'dev-')
   const isGuest = useMemo(() => {
       return userProfile?.sub?.startsWith('dev-') || false;
   }, [userProfile]);
 
-  // Persist user profile to keep session
   useEffect(() => { 
     if (userProfile) {
       localStorage.setItem('scrum_user_profile', JSON.stringify(userProfile)); 
     } else {
       localStorage.removeItem('scrum_user_profile');
-      localStorage.removeItem('scrum_workspace_id'); // Clear workspace on logout from localStorage
+      localStorage.removeItem('scrum_workspace_id');
     }
   }, [userProfile]);
 
-  // Persist selected workspace to localStorage (changed from sessionStorage)
   useEffect(() => {
     if (selectedWorkspaceId) {
       localStorage.setItem('scrum_workspace_id', selectedWorkspaceId);
@@ -153,15 +142,8 @@ export function App() {
     }
   }, [selectedWorkspaceId]);
 
-
-  // --- LOCAL VIEW PREFERENCES (Filter & Collapse) ---
-  // These effects ensure that visual settings are per-user and per-workspace,
-  // stored in LocalStorage, and NOT synced to the database.
-
-  // 1. Load View Preferences when Workspace changes
   useEffect(() => {
     if (selectedWorkspaceId) {
-        // Load Project Filter Preference
         const savedFilter = localStorage.getItem(`scrum_prefs_${selectedWorkspaceId}_filter`);
         if (savedFilter) {
             setFilterProjectId(savedFilter);
@@ -169,7 +151,6 @@ export function App() {
             setFilterProjectId('ALL');
         }
 
-        // Load Assigned To Me Preference
         const savedAssignedToMe = localStorage.getItem(`scrum_prefs_${selectedWorkspaceId}_assignedToMe`);
         if (savedAssignedToMe) {
             setFilterAssignedToMe(savedAssignedToMe === 'true');
@@ -177,7 +158,6 @@ export function App() {
             setFilterAssignedToMe(false);
         }
 
-        // Load Collapsed Tasks Preference
         const savedCollapsed = localStorage.getItem(`scrum_prefs_${selectedWorkspaceId}_collapsed`);
         if (savedCollapsed) {
             try {
@@ -197,30 +177,24 @@ export function App() {
     }
   }, [selectedWorkspaceId]);
 
-  // 2. Save Project Filter Preference when it changes
   useEffect(() => {
       if (selectedWorkspaceId) {
           localStorage.setItem(`scrum_prefs_${selectedWorkspaceId}_filter`, filterProjectId);
       }
   }, [filterProjectId, selectedWorkspaceId]);
 
-  // 3. Save Assigned To Me Preference when it changes
   useEffect(() => {
       if (selectedWorkspaceId) {
           localStorage.setItem(`scrum_prefs_${selectedWorkspaceId}_assignedToMe`, String(filterAssignedToMe));
       }
   }, [filterAssignedToMe, selectedWorkspaceId]);
 
-  // 4. Save Collapsed Tasks Preference when it changes
   useEffect(() => {
       if (selectedWorkspaceId) {
           localStorage.setItem(`scrum_prefs_${selectedWorkspaceId}_collapsed`, JSON.stringify(Array.from(collapsedTaskIds)));
       }
   }, [collapsedTaskIds, selectedWorkspaceId]);
-  // --- END LOCAL VIEW PREFERENCES ---
 
-
-  // Handle closing menus on outside click
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
         if (notificationMenuRef.current && !notificationMenuRef.current.contains(event.target as Node)) setNotificationHistoryOpen(false);
@@ -230,7 +204,6 @@ export function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Clear highlight after a delay
   useEffect(() => {
     if (highlightedTaskId) {
       const timer = setTimeout(() => {
@@ -240,7 +213,6 @@ export function App() {
     }
   }, [highlightedTaskId]);
 
-  // Clear focused task ID if view changes from board
   useEffect(() => {
     if (viewMode !== 'board') {
       setFocusedTaskId(null);
@@ -267,7 +239,6 @@ export function App() {
   
   const handleChangeWorkspace = () => {
     setSelectedWorkspaceId(null);
-    // No need to manually reset filter here, the useEffect above will handle loading/resetting based on the new ID (or lack thereof)
   };
 
   const handleNavigateToTask = (taskId: string) => {
@@ -284,7 +255,6 @@ export function App() {
     setFocusedTaskId(null);
   };
 
-  // Collapse logic
   const toggleTaskCollapse = (taskId: string) => {
     setCollapsedTaskIds(prev => {
         const next = new Set(prev);
@@ -297,18 +267,16 @@ export function App() {
     });
   };
 
-  // Computed property for filtered tasks (MAIN BOARD)
-  // EXCLUDES BACKLOG ITEMS
-  const filteredTasks = useMemo(() => {
-      // Start with all tasks EXCEPT Backlog
-      let result = tasks.filter(t => t.status !== TaskStatus.Backlog);
+  // --- FILTERING LOGIC UPDATE ---
 
-      // 1. Filter by Project
+  // Main tasks (Kanban, List, Active Metrics) - Exclude Backlog AND Archived
+  const filteredTasks = useMemo(() => {
+      let result = tasks.filter(t => t.status !== TaskStatus.Backlog && t.status !== TaskStatus.Archived);
+
       if (filterProjectId !== 'ALL') {
         result = result.filter(t => t.projectId === filterProjectId);
       }
 
-      // 2. Filter by Assigned to Me
       if (filterAssignedToMe && userProfile) {
           result = result.filter(t => t.responsibleId === userProfile.sub);
       }
@@ -316,33 +284,34 @@ export function App() {
       return result;
   }, [tasks, filterProjectId, filterAssignedToMe, userProfile]);
 
-
-  // Computed property for Backlog Tasks (BACKLOG VIEW ONLY)
+  // Backlog Tasks (Backlog View Only)
   const backlogTasks = useMemo(() => {
       let result = tasks.filter(t => t.status === TaskStatus.Backlog);
-      
-      // Filter by Project if selected
       if (filterProjectId !== 'ALL') {
           result = result.filter(t => t.projectId === filterProjectId);
       }
-      
       return result;
   }, [tasks, filterProjectId]);
 
+  // History Tasks (History View Only)
+  const historyTasks = useMemo(() => {
+      let result = tasks.filter(t => t.status === TaskStatus.Archived);
+      if (filterProjectId !== 'ALL') {
+          result = result.filter(t => t.projectId === filterProjectId);
+      }
+      return result;
+  }, [tasks, filterProjectId]);
 
   const handleToggleAllCollapse = () => {
-      // Determine if we should collapse all or expand all based on visible tasks
       const allVisibleAreCollapsed = filteredTasks.length > 0 && filteredTasks.every(t => collapsedTaskIds.has(t.id));
       
       if (allVisibleAreCollapsed) {
-          // Expand all visible tasks
           setCollapsedTaskIds(prev => {
               const next = new Set(prev);
               filteredTasks.forEach(t => next.delete(t.id));
               return next;
           });
       } else {
-          // Collapse all visible tasks
           setCollapsedTaskIds(prev => {
               const next = new Set(prev);
               filteredTasks.forEach(t => next.add(t.id));
@@ -359,12 +328,11 @@ export function App() {
       subtasks: [],
       createdAt: new Date().toISOString(),
       completedAt: null,
-      order: tasks.length, // Add to end by default
+      order: tasks.length,
     };
     setTasks(prevTasks => [...prevTasks, newTask]);
     setAddTaskModalOpen(false);
 
-    // If it's not a backlog task, notify
     if (newTask.status !== TaskStatus.Backlog) {
         const responsibleUser = users.find(u => u.id === newTask.responsibleId);
         if (responsibleUser) {
@@ -375,45 +343,35 @@ export function App() {
     }
   };
 
-  // Promotion Handlers
   const handlePromoteTaskClick = (task: Task) => {
       setTaskToPromote(task);
       setAddTaskModalOpen(true);
   };
 
   const handleUpdatePromotedTask = (updatedTask: Task) => {
-      // Update logic handled by standard updateTask, but we trigger it from modal
       updateTask(updatedTask);
       setAddTaskModalOpen(false);
       setTaskToPromote(null);
       addNotification(`¡Tarea promovida al tablero!`, NotificationType.Success, () => handleNavigateToTask(updatedTask.id));
   };
 
-
   const handleVoiceCommand = async (transcript: string) => {
     if (isGuest || !transcript) return;
 
     try {
-      // Pass full context to AI
       const { title, description, projectId, responsibleId } = await parseTaskFromVoice(transcript, projects, users);
       
       let finalResponsibleId = responsibleId;
-      
-      // Fallback for Responsible: If AI returned null, check if it's assigned to self or keep default
       if (!finalResponsibleId) {
           finalResponsibleId = userProfile?.sub || '';
       }
-      
-      // Lookup user object for notification
       const responsibleUser = users.find(u => u.id === finalResponsibleId);
 
-      // Fallback for Project: If AI returned null, use filter or first available
       let finalProjectId = projectId;
       if (!finalProjectId) {
           finalProjectId = filterProjectId !== 'ALL' ? filterProjectId : (projects[0]?.id || 'default');
       }
 
-      // Create the task
       const newTask: Task = {
         id: `task-${Date.now()}`,
         title: title || "Nueva tarea por voz",
@@ -424,7 +382,7 @@ export function App() {
         subtasks: [],
         createdAt: new Date().toISOString(),
         completedAt: null,
-        order: tasks.length // Add to end
+        order: tasks.length
       };
 
       setTasks(prev => [...prev, newTask]);
@@ -439,7 +397,6 @@ export function App() {
   const updateTaskStatus = (taskId: string, newStatus: TaskStatus) => {
     if (isGuest) return;
     
-    // We use moveTask to handle status updates as moving to the end of the new column
     const destinationTasks = tasks.filter(t => t.status === newStatus);
     moveTask(taskId, newStatus, destinationTasks.length);
 
@@ -448,6 +405,14 @@ export function App() {
         const responsibleUser = users.find(u => u.id === task.responsibleId);
         addNotification(`¡Tarea '${task.title}' completada${responsibleUser ? ` por ${responsibleUser.name}` : ''}!`, NotificationType.Success, () => handleNavigateToTask(task.id));
     }
+  };
+
+  // Function to restore from history
+  const handleRestoreTask = (taskId: string) => {
+      if (isGuest) return;
+      // Restore to 'Done' status
+      updateTaskStatus(taskId, TaskStatus.Done);
+      addNotification("Tarea restaurada al tablero.", NotificationType.Info);
   };
 
   const updateTask = (updatedTask: Task) => {
@@ -459,7 +424,7 @@ export function App() {
       task.id === updatedTask.id ? updatedTask : task
     ));
 
-    if (originalTask.responsibleId !== updatedTask.responsibleId && updatedTask.status !== TaskStatus.Backlog) {
+    if (originalTask.responsibleId !== updatedTask.responsibleId && updatedTask.status !== TaskStatus.Backlog && updatedTask.status !== TaskStatus.Archived) {
       const newUser = users.find(u => u.id === updatedTask.responsibleId);
       if (newUser) {
         addNotification(`Tarea '${updatedTask.title}' reasignada a ${newUser.name}.`, NotificationType.Info, () => handleNavigateToTask(updatedTask.id));
@@ -477,7 +442,6 @@ export function App() {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
     
-    // Find the project to pass its description as context
     const project = projects.find(p => p.id === task.projectId);
 
     try {
@@ -512,10 +476,9 @@ export function App() {
   const deleteProject = (projectId: string) => {
     if (isGuest) return;
     setProjects(prev => prev.filter(p => p.id !== projectId));
-    setTasks(prev => prev.filter(t => t.projectId !== projectId)); // Also delete associated tasks
+    setTasks(prev => prev.filter(t => t.projectId !== projectId));
   };
   
-
   const deleteUser = (userId: string) => {
     if (isGuest) return;
     setUsers(prev => prev.filter(u => u.id !== userId));
@@ -548,8 +511,6 @@ export function App() {
     if (!exportContainerRef.current) return;
     setIsExporting(true);
     try {
-        // We pass the filtered tasks to the exporter if a filter is active
-        // This implicitly excludes Backlog tasks as filteredTasks does not contain them
         await exportDashboardAsPDF(filteredTasks, projects, users, exportContainerRef.current);
     } catch (error) {
         console.error("Failed to export dashboard:", error);
@@ -566,7 +527,6 @@ export function App() {
     return <Login onLoginSuccess={handleLoginSuccess} />;
   }
   
-  // Wait for the user's personal workspace AND the list of workspaces to be initialized
   if (!personalWorkspace || !isWorkspacesListLoaded) {
     return (
         <div className="flex items-center justify-center min-h-screen bg-gray-100">
@@ -592,37 +552,20 @@ export function App() {
       );
   }
   
-  // After selecting a workspace, wait for its data to load.
-  // The currentUser also depends on this data.
   if (!isDataLoaded || !currentUser) {
     return (
         <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 gap-4 p-4 text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#D85929]"></div>
             <p className="text-lg text-gray-600 animate-pulse">Cargando espacio de trabajo...</p>
-            <p className="text-sm text-gray-500 max-w-md">
-                Si esto tarda demasiado, puede haber problemas de conexión.
-            </p>
-            <button
-                onClick={() => setSelectedWorkspaceId(null)}
-                className="mt-4 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors shadow-sm"
-            >
-                Cancelar y Volver
-            </button>
         </div>
     );
   }
 
-  // Find the current workspace object after data is loaded
   const currentWorkspace = [...collaborativeWorkspaces, personalWorkspace].find(w => w?.id === selectedWorkspaceId);
   
-  // If the selected workspace ID from localStorage is invalid, reset.
   if (!currentWorkspace) {
-      handleChangeWorkspace(); // Resets selectedWorkspaceId to null, will re-render to selector
-      return (
-        <div className="flex items-center justify-center min-h-screen bg-gray-100">
-            <p className="text-lg text-gray-600">Espacio de trabajo no válido. Redirigiendo...</p>
-        </div>
-      );
+      handleChangeWorkspace();
+      return null;
   }
 
   const NotificationBell = () => (
@@ -674,7 +617,6 @@ export function App() {
       <header className="bg-white shadow-md sticky top-0 z-40">
         <div className="p-3 sm:p-4 flex justify-between items-center">
           
-          {/* Left Section: Logo & Workspace Info */}
           <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-1">
             <Logo className="h-6 text-[9px] sm:h-8 sm:text-base md:h-10 md:text-lg flex-shrink-0" />
             <div className="h-8 w-px bg-gray-200 hidden sm:block"></div>
@@ -684,7 +626,6 @@ export function App() {
                 <div className="flex items-center justify-center w-5 h-5 sm:w-6 sm:h-6 rounded bg-gray-100 text-xs sm:text-sm flex-shrink-0">
                     {currentWorkspace.icon || (currentWorkspace.isPersonal ? '🏠' : '👥')}
                 </div>
-                {/* Fix clipping: added py-1 and leading-relaxed */}
                 <h1 className="text-sm sm:text-lg font-bold text-gray-800 truncate max-w-[100px] sm:max-w-none min-w-0 py-1 leading-relaxed">{currentWorkspace?.name}</h1>
                  {isFirebaseConfigured ? (
                      <span className="px-2 py-0.5 text-[10px] bg-green-100 text-green-700 rounded-full border border-green-200 font-semibold hidden md:inline-block">SUPABASE</span>
@@ -692,7 +633,7 @@ export function App() {
                      <span className="px-2 py-0.5 text-[10px] bg-gray-100 text-gray-600 rounded-full border border-gray-300 font-semibold hidden md:inline-block">LOCAL</span>
                  )}
                  {isGuest && (
-                    <span className="px-2 py-0.5 text-[10px] bg-orange-100 text-orange-700 rounded-full border border-orange-200 font-bold hidden md:inline-block">INVITADO (Lectura)</span>
+                    <span className="px-2 py-0.5 text-[10px] bg-orange-100 text-orange-700 rounded-full border border-orange-200 font-bold hidden md:inline-block">INVITADO</span>
                  )}
               </div>
               <button
@@ -706,9 +647,7 @@ export function App() {
             </div>
           </div>
 
-          {/* Right Section: Desktop Actions */}
           <div className="hidden md:flex items-center gap-2 sm:gap-4">
-              {/* Project Filter */}
               <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5" title="Filtrar por proyecto">
                    <FilterIcon className="w-4 h-4 text-gray-500" />
                    <select 
@@ -723,7 +662,6 @@ export function App() {
                    </select>
               </div>
 
-              {/* Assigned to Me Filter */}
               <button
                   onClick={() => setFilterAssignedToMe(!filterAssignedToMe)}
                   className={`flex items-center gap-2 border rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${filterAssignedToMe ? 'bg-blue-50 border-[#254467] text-[#254467]' : 'bg-gray-50 border-gray-200 text-gray-700 hover:bg-gray-100'}`}
@@ -734,7 +672,6 @@ export function App() {
                   <span className="lg:hidden">Mío</span>
               </button>
               
-              {/* Collapse/Expand All Button - Only for Kanban */}
               {viewMode === 'kanban' && (
                   <button 
                     onClick={handleToggleAllCollapse}
@@ -745,13 +682,13 @@ export function App() {
                   </button>
               )}
 
-              {/* View Switcher */}
               <div className="flex items-center p-1 bg-gray-200 rounded-lg">
                   <button onClick={() => setViewMode('backlog')} className={`p-1 rounded-md ${viewMode === 'backlog' ? 'bg-white shadow' : 'text-gray-600 hover:bg-white/60'}`} title="Product Backlog"><ArchiveBoxIcon className="w-5 h-5"/></button>
                   <button onClick={() => setViewMode('kanban')} className={`p-1 rounded-md ${viewMode === 'kanban' ? 'bg-white shadow' : 'text-gray-600 hover:bg-white/60'}`} title="Kanban"><KanbanIcon className="w-5 h-5"/></button>
                   <button onClick={() => setViewMode('list')} className={`p-1 rounded-md ${viewMode === 'list' ? 'bg-white shadow' : 'text-gray-600 hover:bg-white/60'}`} title="Lista"><ListIcon className="w-5 h-5"/></button>
                   <button onClick={() => setViewMode('metrics')} className={`p-1 rounded-md ${viewMode === 'metrics' ? 'bg-white shadow' : 'text-gray-600 hover:bg-white/60'}`} title="Métricas"><ChartIcon className="w-5 h-5" /></button>
                   <button onClick={() => setViewMode('board')} className={`p-1 rounded-md ${viewMode === 'board' ? 'bg-white shadow' : 'text-gray-600 hover:bg-white/60'}`} title="Mensajes"><MessageBoardIcon className="w-5 h-5" /></button>
+                  <button onClick={() => setViewMode('history')} className={`p-1 rounded-md ${viewMode === 'history' ? 'bg-white shadow' : 'text-gray-600 hover:bg-white/60'}`} title="Histórico"><ClockIcon className="w-5 h-5" /></button>
               </div>
               
               {!isGuest && (
@@ -783,7 +720,6 @@ export function App() {
               <UserAvatar user={currentUser} />
           </div>
 
-          {/* Right Section: Mobile Actions */}
           <div className="flex items-center gap-2 md:hidden">
             {isGuest && (
                  <span className="px-2 py-0.5 text-[10px] bg-orange-100 text-orange-700 rounded-full border border-orange-200 font-bold">INVITADO</span>
@@ -793,14 +729,12 @@ export function App() {
                 <button
                   onClick={() => setIsVoiceModalOpen(true)}
                   className="p-2 text-[#D85929] bg-orange-100 hover:bg-orange-200 rounded-full shadow-sm transition-colors"
-                  aria-label="Añadir tarea por voz"
                 >
                   <MicrophoneIcon className="w-5 h-5" />
                 </button>
                 <button 
                     onClick={() => { setTaskToPromote(null); setAddTaskModalOpen(true); }} 
                     className="p-2 bg-[#D85929] hover:bg-[#C0481A] text-white rounded-full shadow-sm transition-colors"
-                    aria-label="Añadir Tarea"
                 >
                     <PlusIcon className="w-5 h-5" />
                 </button>
@@ -816,7 +750,6 @@ export function App() {
                    <div className="px-4 py-2 border-b bg-gray-50">
                        <p className="font-semibold text-gray-800 text-sm truncate">{currentUser.name}</p>
                    </div>
-                   {/* Mobile Project Filter */}
                    <div className="px-4 py-2 border-b bg-gray-50">
                        <p className="text-xs font-bold text-gray-500 mb-1 flex items-center gap-1"><FilterIcon className="w-3 h-3"/> Filtrar Proyecto</p>
                        <select 
@@ -831,7 +764,6 @@ export function App() {
                        </select>
                    </div>
 
-                   {/* Mobile Assigned to Me Filter */}
                    <div className="px-4 py-2 border-b bg-gray-50">
                        <button 
                            onClick={() => { setFilterAssignedToMe(!filterAssignedToMe); }}
@@ -845,7 +777,6 @@ export function App() {
                        </button>
                    </div>
 
-                   {/* Mobile Collapse/Expand */}
                    {viewMode === 'kanban' && (
                         <button 
                             onClick={() => { handleToggleAllCollapse(); setMobileMenuOpen(false); }}
@@ -868,7 +799,6 @@ export function App() {
           </div>
         </div>
 
-        {/* Mobile Bottom Row: View Switcher & Notifications */}
         <div className="md:hidden border-t border-gray-100 bg-gray-50 p-2 px-3 flex items-center gap-3">
              <div className="flex-grow flex items-center bg-white border border-gray-200 rounded-lg shadow-sm p-1 justify-between overflow-x-auto">
                 <button onClick={() => setViewMode('backlog')} className={`flex-1 min-w-[40px] flex justify-center py-1.5 rounded-md transition-colors ${viewMode === 'backlog' ? 'bg-gray-100 text-[#D85929]' : 'text-gray-400'}`}><ArchiveBoxIcon className="w-5 h-5"/></button>
@@ -876,6 +806,7 @@ export function App() {
                 <button onClick={() => setViewMode('list')} className={`flex-1 min-w-[40px] flex justify-center py-1.5 rounded-md transition-colors ${viewMode === 'list' ? 'bg-gray-100 text-[#D85929]' : 'text-gray-400'}`}><ListIcon className="w-5 h-5"/></button>
                 <button onClick={() => setViewMode('metrics')} className={`flex-1 min-w-[40px] flex justify-center py-1.5 rounded-md transition-colors ${viewMode === 'metrics' ? 'bg-gray-100 text-[#D85929]' : 'text-gray-400'}`}><ChartIcon className="w-5 h-5" /></button>
                 <button onClick={() => setViewMode('board')} className={`flex-1 min-w-[40px] flex justify-center py-1.5 rounded-md transition-colors ${viewMode === 'board' ? 'bg-gray-100 text-[#D85929]' : 'text-gray-400'}`}><MessageBoardIcon className="w-5 h-5" /></button>
+                <button onClick={() => setViewMode('history')} className={`flex-1 min-w-[40px] flex justify-center py-1.5 rounded-md transition-colors ${viewMode === 'history' ? 'bg-gray-100 text-[#D85929]' : 'text-gray-400'}`}><ClockIcon className="w-5 h-5" /></button>
              </div>
              <div className="flex-shrink-0 bg-white rounded-full shadow-sm border border-gray-200">
                 <NotificationBell />
@@ -904,7 +835,7 @@ export function App() {
             />
           )}
           {viewMode === 'list' && <ListView tasks={filteredTasks} projects={projects} users={users} onUpdateTask={updateTask} />}
-          {viewMode === 'metrics' && <MetricsDashboard tasks={filteredTasks} projects={projects} users={users} />}
+          {viewMode === 'metrics' && <MetricsDashboard tasks={filteredTasks} archivedTasks={historyTasks} projects={projects} users={users} />}
           {viewMode === 'board' && <MessageBoard messages={messages} users={users} tasks={filteredTasks} projects={projects} onAddMessage={addMessage} onUpdateMessage={updateMessage} onDeleteMessage={deleteMessage} onNavigateToTask={handleNavigateToTask} focusedTaskId={focusedTaskId} onClearFocus={clearFocusedTask} currentUser={userProfile} isReadOnly={isGuest} />}
           {viewMode === 'backlog' && (
              <BacklogView 
@@ -916,6 +847,15 @@ export function App() {
                 isReadOnly={isGuest}
              />
           )}
+          {viewMode === 'history' && (
+              <HistoryView 
+                  tasks={historyTasks}
+                  projects={projects}
+                  users={users}
+                  onRestoreTask={handleRestoreTask}
+                  isReadOnly={isGuest}
+              />
+          )}
         </div>
       </main>
 
@@ -923,8 +863,8 @@ export function App() {
         isOpen={isAddTaskModalOpen}
         onClose={() => { setAddTaskModalOpen(false); setTaskToPromote(null); }}
         onAddTask={handleAddTask}
-        onUpdateTask={handleUpdatePromotedTask} // Use this for promotion
-        taskToPromote={taskToPromote} // Pass the task if promoting
+        onUpdateTask={handleUpdatePromotedTask}
+        taskToPromote={taskToPromote}
         projects={projects}
         users={users}
       />

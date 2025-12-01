@@ -1,26 +1,10 @@
-
 import { Task, Project, User } from '../types';
 
 declare const jspdf: any;
 declare const html2canvas: any;
 
-// COMPLETE LOGO (ICON + TEXT) AS SVG
-// This ensures the text fonts and placement are identical in the PDF without relying on browser rendering.
-const LOGO_SVG_STRING = `
-<svg xmlns="http://www.w3.org/2000/svg" width="600" height="150" viewBox="0 0 200 50">
-  <g transform="translate(4, 8) scale(1.1)">
-     <path fill="#D85929" d="M0,0 V12 H10 V0 H22 V12 H38 L26,22 V33 H15 V22 H10 V33 H0 V0 Z" />
-  </g>
-  <g transform="translate(54, 0)">
-     <text x="0" y="24" font-family="Arial Black, Arial, sans-serif" font-weight="900" font-size="22" fill="#254467" letter-spacing="-1">HERMOSILLO</text>
-     <text x="148" y="14" font-family="Arial, sans-serif" font-weight="bold" font-size="6" fill="#254467">®</text>
-     <text x="0" y="39" font-family="Arial, sans-serif" font-weight="500" font-size="9.5" fill="#D85929" letter-spacing="0.5">Experience Matters</text>
-     <text x="92" y="34" font-family="Arial, sans-serif" font-weight="bold" font-size="4" fill="#D85929">®</text>
-  </g>
-</svg>
-`;
-
-const LOGO_DATA_URL = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(LOGO_SVG_STRING)))}`;
+// LOGO URL
+const LOGO_URL = "https://i.imgur.com/aPiqHxa.png";
 
 
 // Helper to convert Image URL to Data URL
@@ -80,7 +64,7 @@ export const exportDashboardAsPDF = async (
 
   // Use the constant Base64 URL directly instead of converting from an external URL.
   // This avoids network dependency and tainting the canvas.
-  const logoPngDataUrl = await urlToDataUrl(LOGO_DATA_URL);
+  const logoPngDataUrl = await urlToDataUrl(LOGO_URL);
 
   // --- KANBAN BOARD SECTION ---
   doc.setFontSize(18);

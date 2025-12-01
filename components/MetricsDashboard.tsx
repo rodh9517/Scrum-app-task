@@ -11,6 +11,7 @@ declare const Chart: any;
 
 interface MetricsDashboardProps {
   tasks: Task[];
+  archivedTasks: Task[]; // New Prop for History Data
   projects: Project[];
   users: User[];
 }
@@ -30,7 +31,7 @@ const MetricCard: React.FC<{ title: string; value: string; subtitle?: string }> 
   </div>
 );
 
-export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ tasks, projects, users }) => {
+export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ tasks, archivedTasks, projects, users }) => {
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const priorityChartRef = useRef<HTMLCanvasElement>(null);
   const chartInstanceRef = useRef<any>(null);
@@ -48,6 +49,7 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ tasks, proje
   const [aiReportHtml, setAiReportHtml] = useState<string | null>(null);
 
   const metrics = useMemo(() => {
+    // Only use ACTIVE tasks (not archived) for these visual metrics
     const completedTasks = tasks.filter(t => t.status === TaskStatus.Done && t.completedAt && t.createdAt);
     const todoOrProgressTasks = tasks.filter(t => t.status !== TaskStatus.Done);
 
@@ -124,7 +126,10 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ tasks, proje
     setIsAnalyzing(true);
     setAiReportHtml(null);
     try {
-        const report = await generatePerformanceAnalysis(tasks, users, analysisStartDate, analysisEndDate);
+        // COMBINE active tasks + archived tasks for AI Analysis ONLY
+        const allTasksForAi = [...tasks, ...archivedTasks];
+        
+        const report = await generatePerformanceAnalysis(allTasksForAi, users, analysisStartDate, analysisEndDate);
         setAiReportHtml(report);
     } catch (error) {
         console.error("AI Analysis failed", error);
@@ -181,7 +186,7 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ tasks, proje
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
             <h1 className="text-2xl font-bold text-gray-800">Métricas de Eficiencia</h1>
-            <p className="text-gray-600 mt-1">Un resumen del rendimiento, cargas de trabajo y prioridades.</p>
+            <p className="text-gray-600 mt-1">Un resumen del rendimiento, cargas de trabajo y prioridades (Excluye histórico visualmente).</p>
         </div>
         <button
           onClick={handleGenerateReport}
@@ -195,8 +200,8 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ tasks, proje
       
       {/* Top Cards Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <MetricCard title="Total de Tareas" value={metrics.totalTasks.toString()} />
-        <MetricCard title="Tareas Completadas" value={metrics.completedTasks.toString()} />
+        <MetricCard title="Total de Tareas (Activas)" value={metrics.totalTasks.toString()} />
+        <MetricCard title="Tareas Completadas (Activas)" value={metrics.completedTasks.toString()} />
         <MetricCard 
             title="Carga de Trabajo Est." 
             value={metrics.totalDurationScore.toString()} 
@@ -217,7 +222,9 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ tasks, proje
                     <MagicIcon className="w-6 h-6 text-purple-600" />
                     Análisis de Ciclo con IA
                 </h2>
-                <p className="text-sm text-gray-600 mt-1">Genera un reporte cualitativo basado en las ponderaciones de tareas completadas en un periodo.</p>
+                <p className="text-sm text-gray-600 mt-1">
+                    Genera un reporte incluyendo tareas <strong>Activas e Históricas</strong> completadas en el periodo.
+                </p>
             </div>
             <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3 w-full md:w-auto">
                  <div className="flex items-center gap-2 bg-white p-2 rounded-lg border border-gray-200 shadow-sm">
@@ -263,7 +270,7 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ tasks, proje
                     dangerouslySetInnerHTML={{ __html: aiReportHtml }}
                 />
                  <div className="mt-4 text-[10px] text-gray-400 text-right italic">
-                    Generado por Gemini AI basado en ponderaciones de Prioridad y Duración.
+                    Generado por Gemini AI basado en ponderaciones de Prioridad y Duración (Incluye histórico).
                 </div>
             </div>
         )}
@@ -272,7 +279,7 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ tasks, proje
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Priority Chart */}
           <div className="bg-white p-6 rounded-lg shadow-md">
-             <h2 className="text-lg font-bold text-gray-800 mb-4">Distribución por Prioridad</h2>
+             <h2 className="text-lg font-bold text-gray-800 mb-4">Distribución por Prioridad (Activas)</h2>
              <div className="h-64">
                 <canvas ref={priorityChartRef}></canvas>
              </div>
@@ -283,13 +290,13 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ tasks, proje
              <h2 className="text-lg font-bold text-gray-800 mb-2">Tiempo de Ciclo Promedio</h2>
              <div className="text-5xl font-bold text-[#254467] my-4">{metrics.averageCycleTime.toFixed(1)} <span className="text-lg text-gray-500 font-normal">días</span></div>
              <p className="text-sm text-gray-500 max-w-xs">
-                Tiempo promedio desde la creación hasta la finalización de las tareas.
+                Tiempo promedio desde la creación hasta la finalización de las tareas activas.
              </p>
           </div>
       </div>
 
       <div>
-        <h2 className="text-xl font-bold text-gray-800 mb-4">Desglose por Proyecto</h2>
+        <h2 className="text-xl font-bold text-gray-800 mb-4">Desglose por Proyecto (Activas)</h2>
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
           <table className="w-full text-xs sm:text-sm text-left text-gray-500">
             <thead className="text-xs text-gray-700 uppercase bg-gray-50">
