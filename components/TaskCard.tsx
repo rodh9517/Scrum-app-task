@@ -266,6 +266,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
   const priority = task.priority || 'Baja';
   const priorityColor = PRIORITY_COLORS[priority];
   const duration = task.duration || '1 día';
+  const isMenuOpen = showPriorityMenu || showDurationMenu;
 
   return (
     <div 
@@ -277,6 +278,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
         ${highlightedTaskId === task.id ? 'ring-2 ring-offset-2 ring-[#D85929] shadow-orange-200' : ''}
         ${!isEditingTask && !isReadOnly ? 'cursor-grab' : ''}
         ${isReadOnly ? 'opacity-90' : ''}
+        ${isMenuOpen ? 'z-20' : ''}
       `}
       draggable={!isEditingTask && !isReadOnly && !showPriorityMenu && !showDurationMenu}
       onDragStart={handleDragStart}
@@ -364,7 +366,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
       {!isCollapsed && (
         <>
             {/* TAGS ROW: Priority & Duration (Interactive) */}
-            <div className="flex flex-wrap items-center gap-2 mb-2 relative z-0">
+            <div className={`flex flex-wrap items-center gap-2 mb-2 relative ${isMenuOpen ? 'z-10' : 'z-0'}`}>
                 
                 {/* Priority Selector */}
                 <div className="relative">

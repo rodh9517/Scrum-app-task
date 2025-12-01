@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { Project, Task, User, Message, Workspace, NotificationType, TaskStatus } from '../types';
 import { PROJECTS, USERS, TASKS, COLLABORATIVE_WORKSPACES } from '../constants';
 import { isSupabaseConfigured, subscribeToWorkspace, saveWorkspaceDataToCloud, subscribeToUserWorkspaces, authenticateWithSupabase, WorkspaceData, deleteUserFromWorkspace } from '../services/supabase';
+import { repairMojibake } from '../utils/stringUtils'; // Import helper
 
 interface UserProfile {
   name: string;
@@ -12,32 +13,6 @@ interface UserProfile {
 }
 
 const USER_COLORS = ['#E24A4A', '#23B2F5', '#E350D3', '#4AE29D', '#F5A623', '#4A90E2', '#8B572A', '#F78DA7'];
-
-// Helper to fix double-encoded strings (Mojibake)
-// e.g. Fixes "GÃ³mez" -> "Gómez" which occurs when UTF-8 is interpreted as Latin-1
-const repairMojibake = (str: string): string => {
-    if (!str) return str;
-    try {
-        let isLatin1 = true;
-        const bytes = new Uint8Array(str.length);
-        for (let i = 0; i < str.length; i++) {
-            const code = str.charCodeAt(i);
-            if (code > 255) {
-                isLatin1 = false;
-                break;
-            }
-            bytes[i] = code;
-        }
-
-        if (isLatin1) {
-            const decoder = new TextDecoder('utf-8', { fatal: true });
-            return decoder.decode(bytes);
-        }
-    } catch (e) {
-        // If decoding fails or is not applicable, return original string
-    }
-    return str;
-};
 
 export const useUserData = (
     userProfile: UserProfile | null, 
@@ -595,7 +570,14 @@ export const useUserData = (
             const safeIndex = Math.max(0, Math.min(newIndex, destColumnTasks.length));
             
             // Create the updated task with new status
-            const updatedTask = { ...taskToMove, status: newStatus };
+            // LOGIC FIX: Set completedAt if moving TO Done. Clear completedAt if moving FROM Done to something else.
+            const updatedTask = { 
+                ...taskToMove, 
+                status: newStatus,
+                completedAt: newStatus === TaskStatus.Done 
+                    ? (taskToMove.completedAt || new Date().toISOString()) 
+                    : null
+            };
             
             // Insert into the destination array
             destColumnTasks.splice(safeIndex, 0, updatedTask);
@@ -603,9 +585,7 @@ export const useUserData = (
             // 4. Re-assign order based on new array position
             const updatedDestColumn = destColumnTasks.map((t, index) => ({
                 ...t,
-                order: index,
-                // If moving to Done, update completedAt
-                completedAt: (newStatus === TaskStatus.Done && t.status !== TaskStatus.Done) ? new Date().toISOString() : t.completedAt
+                order: index
             }));
 
             // 5. Combine back with tasks from other columns

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { KanbanBoard } from './components/KanbanBoard';
 import { ListView } from './components/ListView';
@@ -16,6 +15,7 @@ import { generateSubtasks, parseTaskFromVoice } from './services/geminiService';
 import { useNotifications } from './hooks/useNotifications';
 import { useUserData } from './hooks/useUserData';
 import { timeAgo } from './utils/time';
+import { repairMojibake } from './utils/stringUtils'; // Import helper
 import { exportDashboardAsPDF } from './services/DashboardExporter';
 import { WorkspaceSelector } from './components/WorkspaceSelector';
 import { isSupabaseConfigured } from './services/supabase';
@@ -29,35 +29,6 @@ interface UserProfile {
   picture: string;
   sub: string;
 }
-
-// Helper to fix double-encoded strings (Mojibake)
-// e.g. Fixes "GÃ³mez" -> "Gómez" which occurs when UTF-8 is interpreted as Latin-1
-const repairMojibake = (str: string): string => {
-    if (!str) return str;
-    try {
-        // If string contains characters that look like Latin-1 representation of UTF-8 bytes
-        // We attempt to convert them back to bytes and decode as UTF-8.
-        // We check if all chars are within single byte range to avoid breaking proper Unicode
-        let isLatin1 = true;
-        const bytes = new Uint8Array(str.length);
-        for (let i = 0; i < str.length; i++) {
-            const code = str.charCodeAt(i);
-            if (code > 255) {
-                isLatin1 = false;
-                break;
-            }
-            bytes[i] = code;
-        }
-
-        if (isLatin1) {
-            const decoder = new TextDecoder('utf-8', { fatal: true });
-            return decoder.decode(bytes);
-        }
-    } catch (e) {
-        // If decoding fails or is not applicable, return original string
-    }
-    return str;
-};
 
 // Helper to get user profile from localStorage or fallback to null
 const getInitialProfile = (): UserProfile | null => {
@@ -700,7 +671,7 @@ export function App() {
 
   return (
     <div className="bg-gray-100 min-h-screen flex flex-col">
-      <header className="bg-white shadow-md sticky top-0 z-10">
+      <header className="bg-white shadow-md sticky top-0 z-40">
         <div className="p-3 sm:p-4 flex justify-between items-center">
           
           {/* Left Section: Logo & Workspace Info */}
