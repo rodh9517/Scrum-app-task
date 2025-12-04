@@ -3,8 +3,9 @@ export enum TaskStatus {
   Backlog = 'Backlog',
   ToDo = 'To Do',
   InProgress = 'In Progress',
+  InReview = 'In Review', // New Status
   Done = 'Done',
-  Archived = 'Archived', // New Status for History
+  Archived = 'Archived',
 }
 
 // New Types for Priority and Duration

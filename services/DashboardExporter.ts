@@ -1,3 +1,4 @@
+
 import { Task, Project, User } from '../types';
 
 declare const jspdf: any;
@@ -81,7 +82,8 @@ export const exportDashboardAsPDF = async (
   const clone = kanbanElement.cloneNode(true) as HTMLElement;
 
   // 2. Force DESKTOP specific styling on the clone
-  clone.style.width = '1280px';
+  // Increase width to accommodate 4 columns
+  clone.style.width = '1440px'; 
   clone.style.position = 'absolute';
   clone.style.top = '-10000px'; // Hide it off-screen
   clone.style.left = '0';
@@ -91,7 +93,8 @@ export const exportDashboardAsPDF = async (
   // 3. Force Grid Layout for Kanban
   const gridContainer = clone.querySelector('.grid');
   if (gridContainer instanceof HTMLElement) {
-      gridContainer.style.gridTemplateColumns = 'repeat(3, minmax(0, 1fr))';
+      // Changed to 4 columns to match new board layout
+      gridContainer.style.gridTemplateColumns = 'repeat(4, minmax(0, 1fr))';
   }
 
   // 4. Append clone to body so html2canvas can render it
@@ -106,8 +109,8 @@ export const exportDashboardAsPDF = async (
         scale: 2,
         useCORS: true,
         backgroundColor: '#f3f4f6',
-        windowWidth: 1280,
-        width: 1280
+        windowWidth: 1440,
+        width: 1440
       });
 
       imgData = canvas.toDataURL('image/jpeg', 0.9);

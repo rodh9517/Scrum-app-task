@@ -69,6 +69,7 @@ export const ListView: React.FC<ListViewProps> = ({ tasks, projects, users, onUp
   const getStatusStyles = (status: TaskStatus) => {
       switch (status) {
           case TaskStatus.Done: return 'bg-emerald-50 text-emerald-700 ring-emerald-600/20';
+          case TaskStatus.InReview: return 'bg-purple-50 text-purple-700 ring-purple-600/20'; // Added InReview style
           case TaskStatus.InProgress: return 'bg-blue-50 text-blue-700 ring-blue-700/10';
           case TaskStatus.ToDo: return 'bg-amber-50 text-amber-700 ring-amber-600/20';
           default: return 'bg-gray-50 text-gray-600 ring-gray-500/10';

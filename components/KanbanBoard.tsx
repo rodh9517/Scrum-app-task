@@ -23,6 +23,7 @@ interface KanbanBoardProps {
 const KANBAN_COLUMNS: { title: string; status: TaskStatus }[] = [
   { title: 'Por Hacer', status: TaskStatus.ToDo },
   { title: 'En Progreso', status: TaskStatus.InProgress },
+  { title: 'En Revisión', status: TaskStatus.InReview }, // Added new column
   { title: 'Hecho', status: TaskStatus.Done },
 ];
 
@@ -31,7 +32,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   collapsedTaskIds, onToggleTaskCollapse, isReadOnly, onMoveTask
 }) => {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+    // Adjusted grid: 1 col mobile, 2 cols tablet, 4 cols large desktop (xl)
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
       {KANBAN_COLUMNS.map(({ title, status }) => {
         // Sort tasks by order before passing to column
         const columnTasks = tasks

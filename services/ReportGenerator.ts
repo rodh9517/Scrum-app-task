@@ -1,3 +1,4 @@
+
 import { Task, Project, User, TaskStatus } from '../types';
 
 // Declare global variables from CDNs
@@ -9,6 +10,7 @@ const FONT_FAMILY = 'helvetica';
 const PRIMARY_BRAND_COLOR = '#254467';
 
 const STATUS_DONE_COLOR = '#50E3C2';
+const STATUS_REVIEW_COLOR = '#9333EA'; // Purple for Review
 const STATUS_INPROGRESS_COLOR = '#4A90E2';
 const STATUS_TODO_COLOR = '#F5A623';
 
@@ -143,10 +145,12 @@ export const generateReport = async (tasks: Task[], projects: Project[], users: 
     // --- DATA PROCESSING ---
     const totalTasks = tasks.length;
     const doneTasks = tasks.filter(t => t.status === TaskStatus.Done);
+    const reviewTasks = tasks.filter(t => t.status === TaskStatus.InReview);
     const inProgressTasks = tasks.filter(t => t.status === TaskStatus.InProgress);
     const todoTasks = tasks.filter(t => t.status === TaskStatus.ToDo);
 
     const doneCount = doneTasks.length;
+    const reviewCount = reviewTasks.length;
     const inProgressCount = inProgressTasks.length;
     const todoCount = todoTasks.length;
 
@@ -161,10 +165,10 @@ export const generateReport = async (tasks: Task[], projects: Project[], users: 
     const statusChartConfig = {
         type: 'doughnut',
         data: {
-            labels: ['Completadas', 'En Progreso', 'Por Hacer'],
+            labels: ['Completadas', 'En Revisión', 'En Progreso', 'Por Hacer'],
             datasets: [{
-                data: [doneCount, inProgressCount, todoCount],
-                backgroundColor: [STATUS_DONE_COLOR, STATUS_INPROGRESS_COLOR, STATUS_TODO_COLOR],
+                data: [doneCount, reviewCount, inProgressCount, todoCount],
+                backgroundColor: [STATUS_DONE_COLOR, STATUS_REVIEW_COLOR, STATUS_INPROGRESS_COLOR, STATUS_TODO_COLOR],
                 borderColor: '#FFFFFF',
                 borderWidth: 2,
             }]

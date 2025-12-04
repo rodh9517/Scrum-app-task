@@ -570,11 +570,14 @@ export const useUserData = (
             const safeIndex = Math.max(0, Math.min(newIndex, destColumnTasks.length));
             
             // Create the updated task with new status
-            // LOGIC FIX: Set completedAt if moving TO Done. Clear completedAt if moving FROM Done to something else.
+            // LOGIC FIX: Preserve completedAt if moving to Done OR Archived.
+            // If moving back to active status (ToDo, InProgress, InReview), clear the date.
+            const shouldHaveDate = newStatus === TaskStatus.Done || newStatus === TaskStatus.Archived;
+            
             const updatedTask = { 
                 ...taskToMove, 
                 status: newStatus,
-                completedAt: newStatus === TaskStatus.Done 
+                completedAt: shouldHaveDate
                     ? (taskToMove.completedAt || new Date().toISOString()) 
                     : null
             };

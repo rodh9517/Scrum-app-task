@@ -1,10 +1,11 @@
 
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Task, Project, User, TaskStatus, TaskPriority } from '../types';
-import { DownloadIcon, MagicIcon, ChartIcon } from './Icons';
+import { DownloadIcon, MagicIcon, ChartIcon, UserGroupIcon } from './Icons';
 import { generateReport } from '../services/ReportGenerator';
 import { PRIORITY_WEIGHTS, DURATION_WEIGHTS, PRIORITY_COLORS } from '../constants';
 import { generatePerformanceAnalysis } from '../services/geminiService';
+import { UserAvatar } from './UserAvatar';
 
 // Declare Chart.js global
 declare const Chart: any;
@@ -78,6 +79,7 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ tasks, archi
         priorityDist[p] = (priorityDist[p] || 0) + 1;
     });
 
+    // --- PROJECT METRICS ---
     const projectMetrics = projects.map(project => {
         const projectTasks = tasks.filter(t => t.projectId === project.id);
         const completedProjectTasks = projectTasks.filter(t => t.status === TaskStatus.Done && t.completedAt && t.createdAt);
@@ -97,6 +99,26 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ tasks, archi
         };
     }).sort((a, b) => b.totalTasks - a.totalTasks);
 
+    // --- USER WORKLOAD METRICS (NEW) ---
+    const userMetrics = users.map(user => {
+        const userTasks = tasks.filter(t => t.responsibleId === user.id);
+        const completedUserTasks = userTasks.filter(t => t.status === TaskStatus.Done);
+        const pendingUserTasks = userTasks.filter(t => t.status !== TaskStatus.Done);
+
+        // Calculate "Current Load" based on Duration weights of PENDING tasks
+        const currentLoadScore = pendingUserTasks.reduce((acc, t) => {
+            return acc + DURATION_WEIGHTS[t.duration || '1 día'];
+        }, 0);
+
+        return {
+            ...user,
+            totalTasks: userTasks.length,
+            completedTasks: completedUserTasks.length,
+            completionRate: userTasks.length > 0 ? (completedUserTasks.length / userTasks.length) * 100 : 0,
+            currentLoadScore
+        };
+    }).sort((a, b) => b.currentLoadScore - a.currentLoadScore); // Sort by busiest user
+
     return {
         totalTasks: tasks.length,
         completedTasks: completedTasks.length,
@@ -104,9 +126,10 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ tasks, archi
         totalDurationScore,
         totalUrgencyScore,
         priorityDist,
-        projectMetrics: projectMetrics
+        projectMetrics: projectMetrics,
+        userMetrics: userMetrics // Added to return
     };
-  }, [tasks, projects]);
+  }, [tasks, projects, users]);
 
   const handleGenerateReport = async () => {
     setIsGeneratingReport(true);
@@ -182,7 +205,7 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ tasks, archi
 
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 pb-10">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
             <h1 className="text-2xl font-bold text-gray-800">Métricas de Eficiencia</h1>
@@ -295,6 +318,7 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ tasks, archi
           </div>
       </div>
 
+      {/* Projects Breakdown */}
       <div>
         <h2 className="text-xl font-bold text-gray-800 mb-4">Desglose por Proyecto (Activas)</h2>
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
@@ -302,22 +326,10 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ tasks, archi
             <thead className="text-xs text-gray-700 uppercase bg-gray-50">
               <tr>
                 <th scope="col" className="px-2 py-3 sm:px-4">Proyecto</th>
-                <th scope="col" className="px-1 py-3 sm:px-4 text-center">
-                    <span className="hidden sm:inline">Tareas Totales</span>
-                    <span className="sm:hidden">Tot.</span>
-                </th>
-                <th scope="col" className="px-1 py-3 sm:px-4 text-center">
-                    <span className="hidden sm:inline">Tareas Completadas</span>
-                    <span className="sm:hidden">Comp.</span>
-                </th>
-                <th scope="col" className="px-1 py-3 sm:px-4 text-center">
-                    <span className="hidden sm:inline">Tasa de Finalización</span>
-                    <span className="sm:hidden">%</span>
-                </th>
-                <th scope="col" className="px-1 py-3 sm:px-4 text-center">
-                    <span className="hidden sm:inline">Ciclo Promedio (días)</span>
-                    <span className="sm:hidden">Ciclo</span>
-                </th>
+                <th scope="col" className="px-1 py-3 sm:px-4 text-center">Tareas Totales</th>
+                <th scope="col" className="px-1 py-3 sm:px-4 text-center">Tareas Completadas</th>
+                <th scope="col" className="px-1 py-3 sm:px-4 text-center">Tasa de Finalización</th>
+                <th scope="col" className="px-1 py-3 sm:px-4 text-center">Ciclo Promedio (días)</th>
               </tr>
             </thead>
             <tbody>
@@ -326,7 +338,7 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ tasks, archi
                   <td className="px-2 py-4 sm:px-4 font-medium text-gray-900">
                      <div className="flex items-center gap-1.5 sm:gap-3">
                         <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }}></span>
-                        <span className="truncate max-w-[60px] xs:max-w-[90px] sm:max-w-none block" title={p.name}>{p.name}</span>
+                        <span className="truncate max-w-[120px] sm:max-w-none block" title={p.name}>{p.name}</span>
                      </div>
                   </td>
                   <td className="px-1 py-4 sm:px-4 text-center">{p.totalTasks}</td>
@@ -351,6 +363,63 @@ export const MetricsDashboard: React.FC<MetricsDashboardProps> = ({ tasks, archi
           </table>
         </div>
       </div>
+
+      {/* Users Breakdown (NEW) */}
+      <div>
+        <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+            Desglose por Responsable (Carga de Trabajo)
+        </h2>
+        <div className="bg-white rounded-lg shadow-md overflow-hidden">
+          <table className="w-full text-xs sm:text-sm text-left text-gray-500">
+            <thead className="text-xs text-gray-700 uppercase bg-gray-50">
+              <tr>
+                <th scope="col" className="px-2 py-3 sm:px-4">Responsable</th>
+                <th scope="col" className="px-1 py-3 sm:px-4 text-center">Tareas Asignadas (Activas)</th>
+                <th scope="col" className="px-1 py-3 sm:px-4 text-center">Tareas Completadas</th>
+                <th scope="col" className="px-1 py-3 sm:px-4 text-center">Tasa de Finalización</th>
+                <th scope="col" className="px-1 py-3 sm:px-4 text-center">Carga Actual (Puntos)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {metrics.userMetrics.map(u => (
+                <tr key={u.id} className="bg-white border-b hover:bg-gray-50">
+                  <td className="px-2 py-4 sm:px-4 font-medium text-gray-900">
+                     <div className="flex items-center gap-2">
+                        <UserAvatar user={u} size="small" />
+                        <span className="truncate max-w-[120px] sm:max-w-none">{u.name}</span>
+                     </div>
+                  </td>
+                  <td className="px-1 py-4 sm:px-4 text-center">{u.totalTasks}</td>
+                  <td className="px-1 py-4 sm:px-4 text-center">{u.completedTasks}</td>
+                  <td className="px-1 py-4 sm:px-4">
+                    <div className="flex items-center justify-center gap-2">
+                      <div className="hidden sm:block w-full bg-gray-200 rounded-full h-2.5 max-w-[80px]">
+                        <div className={`h-2.5 rounded-full ${u.completionRate === 100 ? 'bg-green-500' : 'bg-blue-500'}`} style={{ width: `${u.completionRate}%` }}></div>
+                      </div>
+                      <span className="font-medium text-gray-700 text-xs sm:text-sm">{u.completionRate.toFixed(0)}%</span>
+                    </div>
+                  </td>
+                  <td className="px-1 py-4 sm:px-4 text-center font-bold text-gray-800">
+                      {u.currentLoadScore > 0 ? (
+                          <span className={`px-2 py-1 rounded-full text-xs ${u.currentLoadScore > 30 ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'}`}>
+                              {u.currentLoadScore} pts
+                          </span>
+                      ) : (
+                          <span className="text-gray-400 text-xs">-</span>
+                      )}
+                  </td>
+                </tr>
+              ))}
+              {metrics.userMetrics.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="text-center py-8 text-gray-500">No hay usuarios con tareas asignadas.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
     </div>
   );
 };
